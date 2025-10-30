@@ -1,7 +1,7 @@
 pipeline {
   agent {
     kubernetes {
-      cloud 'Kubernetes'              // nome configurado no Jenkins
+      cloud 'delend-HML-k8s'              // nome configurado no Jenkins
       defaultContainer 'jnlp'
       yaml """
 apiVersion: v1
