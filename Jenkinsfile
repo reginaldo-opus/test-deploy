@@ -1,7 +1,7 @@
 pipeline {
   agent {
     kubernetes {
-      cloud 'Cluster'              // nome configurado no Jenkins
+      cloud 'Kubernetes'              // nome configurado no Jenkins
       defaultContainer 'jnlp'
       yaml """
 apiVersion: v1
