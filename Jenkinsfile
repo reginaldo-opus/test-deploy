@@ -14,7 +14,7 @@ spec:
   containers:
     - name: jnlp
       image: jenkins/inbound-agent:latest
-      args: ['\\$(JENKINS_SECRET)', '\\$(JENKINS_NAME)']
+      args: ['$(JENKINS_SECRET)', '$(JENKINS_NAME)']
     - name: kubectl
       image: bitnami/kubectl:1.30
       command: ['cat']
