@@ -11,10 +11,24 @@ spec:
     targetRevision: 13.2.25
     helm:
       values: |
+        image:
+          registry: registry-1.docker.io
+          repository: bitnami/postgresql
+          tag: "latest"
+
         auth:
           username: kong
           password: kong
           database: kong
+
+        primary:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: kong
