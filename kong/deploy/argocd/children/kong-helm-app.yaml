@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kong-helm
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.konghq.com
+    chart: kong
+    targetRevision: 2.36.0
+    helm:
+      values: |
+        env:
+          database: postgres
+          pg_user: kong
+          pg_password: kong
+          pg_database: kong
+          pg_host: kong-postgres-postgresql.kong.svc.cluster.local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kong
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
