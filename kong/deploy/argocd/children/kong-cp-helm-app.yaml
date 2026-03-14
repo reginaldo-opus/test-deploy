@@ -19,7 +19,7 @@ spec:
           pg_user: kong
           pg_password: kong
           pg_database: kong
-          pg_host: kong-postgres-postgresql.kong.svc.cluster.local
+          pg_host: kong-postgres-helm-postgresql.kong.svc.cluster.local
         admin:
           enabled: true
           http:
