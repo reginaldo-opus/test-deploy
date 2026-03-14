@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: kong-postgres-helm
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   source:
@@ -36,4 +38,3 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncWave: 0
