@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/reginaldo-opus/test-deploy.git
     targetRevision: main
-    path: deploy/argocd/children
+    path: kong/deploy/argocd/children
     directory:
       recurse: true
   destination:
