@@ -23,7 +23,7 @@ spec:
   source:
     repoURL: https://github.com/reginaldo-opus/test-deploy.git
     targetRevision: main
-    path: terraform/kong-deck/deploy/base
+    path: terraform/kong-deck/deploy/stack
 
   destination:
     server: https://kubernetes.default.svc

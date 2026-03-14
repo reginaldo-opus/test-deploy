@@ -1,18 +1,23 @@
-## ArgoCD Helm Values
-
 server:
   service:
     type: NodePort
     nodePortHttp: 30080
     nodePortHttps: 30443
-
+  
   extraArgs:
     - --insecure
 
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
 configs:
   params:
-    server.insecure: true
-
+    server.insecure: "true" # Garante que o server aceite conexões HTTP
   cm:
     timeout.reconciliation: 180s
 
@@ -27,15 +32,6 @@ controller:
     limits:
       cpu: 500m
       memory: 512Mi
-
-server:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 300m
-      memory: 256Mi
 
 repoServer:
   resources:
