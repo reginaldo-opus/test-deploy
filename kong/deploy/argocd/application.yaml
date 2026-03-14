@@ -1,0 +1,54 @@
+# ===========================================================================
+# ArgoCD Application that watches the kong-deck k8s manifests in Git
+# and syncs them to the target cluster.
+#
+# On every commit that changes kong.yml (via Terraform + CI), ArgoCD:
+#   1. Detects the ConfigMap change (content hash in name)
+#   2. Applies the updated ConfigMap
+#   3. Runs the PostSync hook (deck-sync Job)
+#   4. The Job executes `deck sync` to push config to Kong Admin API
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kong-deck-config
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: oob-kong
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/reginaldo-opus/test-deploy.git
+    targetRevision: main
+    path: terraform/kong-deck/deploy/base
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kong
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
+
+  # Health checks
+  ignoreDifferences:
+    - group: batch
+      kind: Job
+      jsonPointers:
+        - /spec/selector
+        - /spec/template/metadata/labels
