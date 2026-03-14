@@ -20,6 +20,11 @@ spec:
           pg_password: kong
           pg_database: kong
           pg_host: kong-postgres-helm-postgresql.kong.svc.cluster.local
+          cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
+          cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
+          lua_ssl_trusted_certificate: /etc/secrets/kong-cluster-cert/tls.crt
+        # ...existing code...
+        # ...existing code...
         admin:
           enabled: true
           http:
