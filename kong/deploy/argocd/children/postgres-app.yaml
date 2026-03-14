@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kong-postgres
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/reginaldo-opus/test-deploy.git
+    targetRevision: main
+    path: deploy/postgres
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kong
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncWave: 0
