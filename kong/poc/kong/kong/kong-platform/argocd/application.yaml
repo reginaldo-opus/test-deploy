@@ -8,7 +8,7 @@ spec:
 
   source:
     repoURL: https://github.com/reginaldo-opus/test-deploy.git
-    targetRevision: master
+    targetRevision: main
     path: kong/poc/kong/kong-platform/platform/kong
     helm:
       valueFiles:
