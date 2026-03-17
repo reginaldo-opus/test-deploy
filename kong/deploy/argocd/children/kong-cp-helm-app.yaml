@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kong-cp-helm
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://charts.konghq.com
+    chart: kong
+    targetRevision: 2.36.0
+    helm:
+      values: |
+        env:
+          role: control_plane
+          database: postgres
+          pg_user: kong
+          pg_password: kong
+          pg_database: kong
+          pg_host: kong-postgres-helm-postgresql.kong.svc.cluster.local
+          cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
+          cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
+          lua_ssl_trusted_certificate: /etc/secrets/kong-cluster-cert/tls.crt
+        # ...existing code...
+        # ...existing code...
+        admin:
+          enabled: true
+          http:
+            enabled: true
+            containerPort: 8001
+          type: NodePort
+          nodePort: 30001
+        proxy:
+          enabled: false
+        ingressController:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kong
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

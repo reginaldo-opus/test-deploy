@@ -1,0 +1,43 @@
+server:
+  service:
+    type: NodePort
+    nodePortHttp: 30080
+    nodePortHttps: 30443
+  
+  extraArgs:
+    - --insecure
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+configs:
+  params:
+    server.insecure: "true" # Garante que o server aceite conexões HTTP
+  cm:
+    timeout.reconciliation: 180s
+
+redis-ha:
+  enabled: false
+
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+repoServer:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 2Gi 
+    limits:
+      cpu: 300m
+      memory: 2Gi

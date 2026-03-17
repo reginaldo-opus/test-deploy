@@ -1,0 +1,32 @@
+kong-cp:
+  image:
+    repository: "{{ .Values.global.image.repository }}"
+    tag: "{{ .Values.global.image.tag }}"
+
+  env:
+    role: control_plane
+    database: postgres
+    pg_host: "{{ .Values.global.postgres.host }}"
+    pg_port: "{{ .Values.global.postgres.port }}"
+    pg_user: "{{ .Values.global.postgres.user }}"
+    pg_password: "{{ .Values.global.postgres.password }}"
+    pg_database: "{{ .Values.global.postgres.database }}"
+
+  cluster:
+    enabled: true
+    tls:
+      enabled: true
+
+  admin:
+    enabled: true
+    http:
+      enabled: true
+      containerPort: 8001
+    type: NodePort
+    nodePort: "{{ .Values.global.nodePorts.admin }}"
+
+  proxy:
+    enabled: false
+
+  ingressController:
+    enabled: false
