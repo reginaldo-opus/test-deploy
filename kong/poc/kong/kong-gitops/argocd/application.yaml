@@ -8,8 +8,8 @@ spec:
 
   source:
     repoURL: https://github.com/reginaldo-opus/test-deploy.git
-    targetRevision: main
-    path: kong/poc/kong/kong-platform/platform/kong
+    targetRevision: master
+    path: kong/poc/kong/kong-gitops/plataform/kong
     helm:
       valueFiles:
         - values.yaml
