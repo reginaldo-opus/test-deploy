@@ -1,0 +1,35 @@
+# ==========================================================
+# GLOBAL VALUES - HML
+# Todas as variáveis compartilhadas ficam aqui
+# ==========================================================
+
+global:
+
+  # --------------------------------------------------------
+  # Namespace padrão
+  # --------------------------------------------------------
+  namespace: kong
+
+  # --------------------------------------------------------
+  # Docker Images
+  # --------------------------------------------------------
+  imageRegistry: 618430153747.dkr.ecr.us-east-1.amazonaws.com
+
+  kong:
+    repository: opus-open-banking-release/oob-kong
+    tag: "2.35.0.17618d5-kong-3.10"
+
+  postgres:
+    registry: registry-1.docker.io
+    repository: bitnami/postgresql
+    tag: "15.6.0"
+
+  # --------------------------------------------------------
+  # Database
+  # --------------------------------------------------------
+  database:
+    host: postgres-kong-postgresql.kong.svc.cluster.local
+    port: 5432
+    name: kong
+    user: kong
+    password: kong   # ⚠️ trocar por secret futuramente

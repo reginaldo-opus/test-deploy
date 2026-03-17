@@ -1,0 +1,32 @@
+image:
+  repository: "{{ .Values.global.imageRegistry }}/{{ .Values.global.kong.repository }}"
+  tag: "{{ .Values.global.kong.tag }}"
+
+env:
+  role: control_plane
+  database: postgres
+
+  pg_host: "{{ .Values.global.database.host }}"
+  pg_port: "{{ .Values.global.database.port }}"
+  pg_user: "{{ .Values.global.database.user }}"
+  pg_password: "{{ .Values.global.database.password }}"
+  pg_database: "{{ .Values.global.database.name }}"
+
+  cluster_listen: 0.0.0.0:8005
+  cluster_telemetry_listen: 0.0.0.0:8006
+
+cluster:
+  enabled: true
+  tls:
+    enabled: true
+
+admin:
+  enabled: true
+  type: NodePort
+  nodePort: 30001
+
+proxy:
+  enabled: false
+
+ingressController:
+  enabled: false

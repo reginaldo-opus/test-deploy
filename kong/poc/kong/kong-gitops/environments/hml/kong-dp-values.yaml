@@ -1,0 +1,23 @@
+image:
+  repository: "{{ .Values.global.imageRegistry }}/{{ .Values.global.kongRepository }}"
+  tag: "{{ .Values.global.kongTag }}"
+
+env:
+  role: data_plane
+  database: "off"
+
+  cluster_control_plane: kong-cp-kong-cluster.kong.svc.cluster.local:8005
+
+  cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
+  cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
+
+proxy:
+  enabled: true
+  type: NodePort
+  nodePort: 30080
+
+admin:
+  enabled: false
+
+ingressController:
+  enabled: false
