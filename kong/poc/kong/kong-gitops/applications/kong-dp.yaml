@@ -13,8 +13,8 @@ spec:
     targetRevision: 2.x.x
     helm:
       valueFiles:
-        - ../../environments/hml/global-values.yaml
-        - ../../environments/hml/kong-dp-values.yaml
+        - ../environments/hml/global-values.yaml
+        - ../environments/hml/kong-dp-values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: kong
