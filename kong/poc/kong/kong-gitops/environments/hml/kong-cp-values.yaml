@@ -1,16 +1,17 @@
 image:
-  repository: "{{ .Values.global.imageRegistry }}/{{ .Values.global.kong.repository }}"
-  tag: "{{ .Values.global.kong.tag }}"
+  repository: 618430153747.dkr.ecr.us-east-1.amazonaws.com/opus-open-banking-release/oob-kong
+  tag: "2.35.0.17618d5-kong-3.10"
+  effectiveSemver: "3.10.0" # Força o Helm do Kong a entender a versão corretamente
 
 env:
   role: control_plane
   database: postgres
 
-  pg_host: "{{ .Values.global.database.host }}"
-  pg_port: "{{ .Values.global.database.port }}"
-  pg_user: "{{ .Values.global.database.user }}"
-  pg_password: "{{ .Values.global.database.password }}"
-  pg_database: "{{ .Values.global.database.name }}"
+  pg_host: postgres-kong-postgresql.kong.svc.cluster.local
+  pg_port: "5432"
+  pg_user: kong
+  pg_password: kong
+  pg_database: kong
 
   cluster_listen: 0.0.0.0:8005
   cluster_telemetry_listen: 0.0.0.0:8006

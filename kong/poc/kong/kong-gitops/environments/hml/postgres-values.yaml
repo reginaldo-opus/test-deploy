@@ -1,16 +1,12 @@
-# ------------------------------------------------------------------
-# Postgres Helm Values
-# Usa variáveis globais
-# ------------------------------------------------------------------
-
 image:
-  repository: "{{ .Values.global.postgres.repository }}"
-  tag: "{{ .Values.global.postgres.tag }}"
+  registry: registry-1.docker.io
+  repository: bitnami/postgresql
+  tag: "15.6.0"
 
 auth:
-  username: "{{ .Values.global.database.user }}"
-  password: "{{ .Values.global.database.password }}"
-  database: "{{ .Values.global.database.name }}"
+  username: kong
+  password: kong
+  database: kong
 
 primary:
   resources:
@@ -19,4 +15,4 @@ primary:
       memory: 256Mi
     limits:
       cpu: 500m
-      memory: 512Mi"
+      memory: 512Mi

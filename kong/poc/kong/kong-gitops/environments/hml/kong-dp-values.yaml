@@ -1,15 +1,13 @@
 image:
-  repository: "{{ .Values.global.imageRegistry }}/{{ .Values.global.kongRepository }}"
-  tag: "{{ .Values.global.kongTag }}"
+  repository: 618430153747.dkr.ecr.us-east-1.amazonaws.com/opus-open-banking-release/oob-kong
+  tag: "2.35.0.17618d5-kong-3.10"
+  effectiveSemver: "3.10.0" # Força o Helm do Kong a entender a versão corretamente
 
 env:
   role: data_plane
   database: "off"
 
   cluster_control_plane: kong-cp-kong-cluster.kong.svc.cluster.local:8005
-
-  cluster_cert: /etc/secrets/kong-cluster-cert/tls.crt
-  cluster_cert_key: /etc/secrets/kong-cluster-cert/tls.key
 
 proxy:
   enabled: true
