@@ -13,9 +13,11 @@ spec:
         - name: deck
           image: kong/deck:v1.56.0
           args:
+            # 1. Comando atualizado para a versão 1.56.0:
+            - gateway
             - sync
-            - --state
-            - /workspace/kong.yml
+            # 2. Caminho do arquivo direto (sem o --state), usando a extensão .yaml
+            - /workspace/kong.yaml  
             - --kong-addr
             - http://kong-cp-kong-admin.kong.svc.cluster.local:8001
           volumeMounts:
