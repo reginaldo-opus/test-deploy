@@ -76,9 +76,9 @@ import_kong_image() {
     echo "Pull da imagem original..."
     docker pull --platform=linux/amd64 "${FULL_ECR_IMAGE}"
 
-    echo "Carregando imagem no KIND (mantendo nome original)..."
-    kind load docker-image "${FULL_ECR_IMAGE}" \
-        --name "${KIND_CLUSTER_NAME}"
+    echo "Carregando imagem no KIND (contornando bug do containerd v2)..."
+    # Solução contornando o erro de "no unpack platforms defined: invalid argument"
+    docker save "${FULL_ECR_IMAGE}" | docker exec -i "${KIND_NODE}" ctr -n k8s.io images import -
 
     echo "Validando importação no containerd..."
     docker exec "${KIND_NODE}" \
