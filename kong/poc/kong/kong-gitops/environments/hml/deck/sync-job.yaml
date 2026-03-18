@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kong-deck-sync
+  namespace: kong
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      containers:
+        - name: deck
+          image: kong/deck:v1.56.0
+          args:
+            - sync
+            - --state
+            - /workspace/kong.yml
+            - --kong-addr
+            - http://kong-cp-kong-admin.kong.svc.cluster.local:8001
+          volumeMounts:
+            - name: deck-state-volume
+              mountPath: /workspace
+      volumes:
+        - name: deck-state-volume
+          configMap:
+            name: kong-deck-state
+      restartPolicy: Never
+  backoffLimit: 2
