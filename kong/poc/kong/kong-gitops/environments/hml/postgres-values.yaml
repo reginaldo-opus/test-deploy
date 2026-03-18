@@ -4,7 +4,6 @@
 # ------------------------------------------------------------------
 
 image:
-  registry: "{{ .Values.global.postgres.registry }}"
   repository: "{{ .Values.global.postgres.repository }}"
   tag: "{{ .Values.global.postgres.tag }}"
 

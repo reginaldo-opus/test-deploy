@@ -9,15 +9,15 @@ spec:
   project: default
 
   sources:
-    # 1) Chart remoto
-    - repoURL: https://charts.bitnami.com/bitnami
+    # Source 1: Chart OCI
+    - repoURL: registry-1.docker.io/bitnamicharts
       chart: postgresql
       targetRevision: 18.5.7
       helm:
         valueFiles:
           - $values/environments/hml/postgres-values.yaml
 
-    # 2) Repo Git com os values
+    # Source 2: seu Git com values
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
       targetRevision: main
       ref: values

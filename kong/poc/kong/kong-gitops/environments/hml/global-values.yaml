@@ -20,7 +20,6 @@ global:
     tag: "2.35.0.17618d5-kong-3.10"
 
   postgres:
-    registry: registry-1.docker.io
     repository: bitnami/postgresql
     tag: "latest"
 
@@ -32,4 +31,4 @@ global:
     port: 5432
     name: kong
     user: kong
-    password: kong   # ⚠️ trocar por secret futuramente
+    password: kong
