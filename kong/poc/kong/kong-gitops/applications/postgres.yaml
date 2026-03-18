@@ -9,19 +9,17 @@ spec:
   project: default
 
   sources:
-    # Source 1: Chart OCI
     - repoURL: registry-1.docker.io/bitnamicharts
       chart: postgresql
       targetRevision: 18.5.7
       helm:
         valueFiles:
-          - $values/environments/hml/postgres-values.yaml
+          # CAMINHO COMPLETO A PARTIR DA RAIZ DO GIT
+          - $values/kong/poc/kong/kong-gitops/environments/hml/postgres-values.yaml
 
-    # Source 2: seu Git com values
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
       targetRevision: main
       ref: values
-      path: kong/poc/kong/kong-gitops
 
   destination:
     server: https://kubernetes.default.svc
