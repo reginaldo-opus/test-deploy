@@ -1,16 +1,86 @@
 image:
   repository: 618430153747.dkr.ecr.sa-east-1.amazonaws.com/opus-open-banking-release/oob-kong
   tag: "2.35.0.17618d5-kong-3.10"
-  effectiveSemver: "3.10.0" # Força o Helm do Kong a entender a versão corretamente
 
 env:
   role: data_plane
   database: "off"
-
   cluster_control_plane: kong-cp-kong-cluster.kong.svc.cluster.local:8005
+  cluster_cert: |
+    -----BEGIN CERTIFICATE-----
+    MIIDFTCCAf2gAwIBAgIUEfrEeNp5I96GLflq3CQWRzIVpIYwDQYJKoZIhvcNAQEL
+    BQAwGjEYMBYGA1UEAwwPa29uZ19jbHVzdGVyaW5nMB4XDTI2MDMxMzIyMzI1NFoX
+    DTI5MDMxMjIyMzI1NFowGjEYMBYGA1UEAwwPa29uZ19jbHVzdGVyaW5nMIIBIjAN
+    BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw/UOu4gbR3A4ozE4AAxLhnLWqZX3
+    8P4WxUVX04YHKanXKJVPy8CTDVVFj0h8UaI1TlqZRwrsx9FsIGEc5J1kQR41vtnf
+    7l6xWI2l/bTeq+cp+w/3M8AtY815oJxNPEKPDlN9lOtASTn5ifTTLmHeG7MGJV0c
+    zDr50PlENVSKPWokHkIvgnSrCx96GiUxviAVFlP7QXyRZkA/sqymAbe8+U652Ns8
+    SR6GhO1cfX9Xmk4Ei+OWwF95fECzbcUMESXofeYvFyhIvcuJjwlDSq25aNlLqpD6
+    3iB2z2uHuiWeuYHZXgaQX3pdrO0qhEDTfbPI/QMwHgGYuf+rSo2NjI9mfwIDAQAB
+    o1MwUTAdBgNVHQ4EFgQU30L+k27nZY/EGHGZSe2YrNu975EwHwYDVR0jBBgwFoAU
+    30L+k27nZY/EGHGZSe2YrNu975EwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0B
+    AQsFAAOCAQEAFLN+dSvUrH5kRJQe3qJCnw2hP8yQMEYSWahbd/zsNjfXT9JmvsUy
+    o7w7w52ji7+Um7VMpaXbYpWkb5upefEDOv0lDAj76tZrfdnRDTpZ8hKaVBX79AQq
+    kOpR6hKLc+t8lzGUd2VyU19uRloWC9Xj4qEP7TDQP3wFotTBUp/A5qPq+MxaY843
+    Dtxq31BWMLunUtOiiGoDDrojiGn+GSVxNm+qt2DAyM9QhrDI2elDiSRQ/52Ek1qj
+    ZLgK/aH1xej6dFOKwGtn9A8fKOfgvlMwhuYCjvqMWBMF0I0nyfOLV8cc/dZnXO42
+    xowK991hw6IGKDN5mCwMcqHX4hT8f9tMvA==
+    -----END CERTIFICATE-----
+  cluster_cert_key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDD9Q67iBtHcDij
+    MTgADEuGctaplffw/hbFRVfThgcpqdcolU/LwJMNVUWPSHxRojVOWplHCuzH0Wwg
+    YRzknWRBHjW+2d/uXrFYjaX9tN6r5yn7D/czwC1jzXmgnE08Qo8OU32U60BJOfmJ
+    9NMuYd4bswYlXRzMOvnQ+UQ1VIo9aiQeQi+CdKsLH3oaJTG+IBUWU/tBfJFmQD+y
+    rKYBt7z5TrnY2zxJHoaE7Vx9f1eaTgSL45bAX3l8QLNtxQwRJeh95i8XKEi9y4mP
+    CUNKrblo2UuqkPreIHbPa4e6JZ65gdleBpBfel2s7SqEQNN9s8j9AzAeAZi5/6tK
+    jY2Mj2Z/AgMBAAECggEAHJeUqztMU6ulr/YeCC/DE16NQNhfgZvpgaZBDt2XDPa5
+    rLPAnWe/bSociLAYZ6bl5UVl6Q5Ih01g3AafeyIV/0RjrjHHMVZCxTuB1Vd/SBDm
+    OLpXJQds+AuCrDMyN9E0Y3A+OizrR+P8K6t75uAj0uHXyzrfWVNfoSTF1Yw80YH6
+    BuidtmZU6zciwI3HIJIrpnR9L5zO7NysOLOJKlX4WfR0hijO41lykm6fLhDCyskP
+    kIlJzgoIpQh9Viqev/20RuyQX1UiRrBrwY1jMmI+UqdeGFN9fP+v7h6Dp3rOanpy
+    YHkrcxPApWQGeS/XQ0T4dpftv3nEgBwB24pOrEhHqQKBgQD4QZtTN+8GdfaXCTWf
+    pRZjB2ANJduYZM8e8x4JR2XyaWhb5SBraSzCV8MRIA86IMLCCGntMY9Z22y6QYLQ
+    BX16oanMju7ol576zT0a18jQDDf7U1thupcY/6+fVJFUL/OcLXHaqChSL41zRhRx
+    qANOPMJr36RcMOOf53bIuWngVwKBgQDKEdQ8CbwFKJ0/wapV3da0K4OYHbC5/rVn
+    3pP7wXooQ3JGKao3avVegKH8UWEL9xQJwYWDSwF4rlSc1a6DWQctxDnw1mHxyhbO
+    ttgeOnLY353hZTw3NbyAXWwb2e2aUkbUowbWc2IPvha6RpWieI8yVUO+D+AilYtp
+    6kClkSSyGQKBgCV+cyEMb5NAOa/x+iFUY58tO/qAXzwS7Z01BrJMED+eX96RKmZO
+    ii4H5zQs7V/QFtoLP0RNmeLuWut+fW1BhwQAao60f6ytSZuDZ9koAfI6BjJ1EnYe
+    IjfqVfHwacqXO2m5C1sEzqIrAGgKi4fm4ijs0EhOjJpH3/kEklIafr0dAoGAKTSB
+    hsylXpftmPaw+VmHUq4c44QKaaMa8tdcbdYCRvuZ7dzJLQvOhTrNzVn65Cm6GFMy
+    GpfM8QL7lg+synP5FsgQ2J+e0WNYS0bVwzQ//yF6XF/8a3W1vqdOSE+kN/fXIb0s
+    w8Y7lOI6WDnUgZD8AlOIwNUT63l7OFngXOLADOECgYAga6b6Wh53mWxB61AC8H7X
+    JR/SxmR0EwRXkgIzqsrhpeBHo0TUoWbUEDTpgKEh/5dkpvDXPt77XATQSFqwbeo4
+    INtHG4KFfLFtUicntVGZxwyYvXlZJxC0K5Ekg7q8NHUx+VOX2cRZoO5zV919tzDl
+    5SMLUqGEwbS3oQEwB03aVQ==
+    -----END PRIVATE KEY-----
+  lua_ssl_trusted_certificate: |
+    -----BEGIN CERTIFICATE-----
+    MIIDFTCCAf2gAwIBAgIUEfrEeNp5I96GLflq3CQWRzIVpIYwDQYJKoZIhvcNAQEL
+    BQAwGjEYMBYGA1UEAwwPa29uZ19jbHVzdGVyaW5nMB4XDTI2MDMxMzIyMzI1NFoX
+    DTI5MDMxMjIyMzI1NFowGjEYMBYGA1UEAwwPa29uZ19jbHVzdGVyaW5nMIIBIjAN
+    BgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw/UOu4gbR3A4ozE4AAxLhnLWqZX3
+    8P4WxUVX04YHKanXKJVPy8CTDVVFj0h8UaI1TlqZRwrsx9FsIGEc5J1kQR41vtnf
+    7l6xWI2l/bTeq+cp+w/3M8AtY815oJxNPEKPDlN9lOtASTn5ifTTLmHeG7MGJV0c
+    zDr50PlENVSKPWokHkIvgnSrCx96GiUxviAVFlP7QXyRZkA/sqymAbe8+U652Ns8
+    SR6GhO1cfX9Xmk4Ei+OWwF95fECzbcUMESXofeYvFyhIvcuJjwlDSq25aNlLqpD6
+    3iB2z2uHuiWeuYHZXgaQX3pdrO0qhEDTfbPI/QMwHgGYuf+rSo2NjI9mfwIDAQAB
+    o1MwUTAdBgNVHQ4EFgQU30L+k27nZY/EGHGZSe2YrNu975EwHwYDVR0jBBgwFoAU
+    30L+k27nZY/EGHGZSe2YrNu975EwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0B
+    AQsFAAOCAQEAFLN+dSvUrH5kRJQe3qJCnw2hP8yQMEYSWahbd/zsNjfXT9JmvsUy
+    o7w7w52ji7+Um7VMpaXbYpWkb5upefEDOv0lDAj76tZrfdnRDTpZ8hKaVBX79AQq
+    kOpR6hKLc+t8lzGUd2VyU19uRloWC9Xj4qEP7TDQP3wFotTBUp/A5qPq+MxaY843
+    Dtxq31BWMLunUtOiiGoDDrojiGn+GSVxNm+qt2DAyM9QhrDI2elDiSRQ/52Ek1qj
+    ZLgK/aH1xej6dFOKwGtn9A8fKOfgvlMwhuYCjvqMWBMF0I0nyfOLV8cc/dZnXO42
+    xowK991hw6IGKDN5mCwMcqHX4hT8f9tMvA==
+    -----END CERTIFICATE-----
 
 proxy:
   enabled: true
+  http:
+    enabled: true
+    containerPort: 8000
   type: NodePort
   nodePort: 30080
 
