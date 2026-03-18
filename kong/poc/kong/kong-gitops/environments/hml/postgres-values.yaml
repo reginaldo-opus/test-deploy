@@ -1,7 +1,7 @@
 image:
   registry: registry-1.docker.io
   repository: bitnami/postgresql
-  tag: "15.6.0"
+  tag: "latest"
 
 auth:
   username: kong

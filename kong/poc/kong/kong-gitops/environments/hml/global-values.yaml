@@ -13,7 +13,7 @@ global:
   # --------------------------------------------------------
   # Docker Images
   # --------------------------------------------------------
-  imageRegistry: 618430153747.dkr.ecr.us-east-1.amazonaws.com
+  imageRegistry: 618430153747.dkr.ecr.sa-east-1.amazonaws.com
 
   kong:
     repository: opus-open-banking-release/oob-kong
