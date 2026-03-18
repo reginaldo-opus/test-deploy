@@ -5,7 +5,7 @@ image:
 env:
   role: control_plane
   database: postgres
-  ppg_host: postgres-kong-postgresql.kong.svc.cluster.local
+  ppg_host: postgres-postgresql.kong.svc.cluster.local
   pg_port: "5432"
   pg_user: kong
   pg_password: kong

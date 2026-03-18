@@ -27,7 +27,7 @@ global:
   # Database
   # --------------------------------------------------------
   database:
-    host: postgres-kong-postgresql.kong.svc.cluster.local
+    host: postgres-postgresql.kong.svc.cluster.local
     port: 5432
     name: kong
     user: kong
