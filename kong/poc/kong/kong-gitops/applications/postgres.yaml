@@ -12,7 +12,7 @@ spec:
     # 🔹 1 - Helm chart remoto
     - repoURL: https://charts.bitnami.com/bitnami
       chart: postgresql
-      targetRevision: 18.5.7
+      targetRevision: 15.6.0
       helm:
         valueFiles:
           - $values/environments/hml/global-values.yaml
