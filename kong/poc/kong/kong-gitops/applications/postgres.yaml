@@ -7,17 +7,27 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
-  source:
-    repoURL: registry-1.docker.io/bitnamicharts
-    chart: postgresql
-    targetRevision: 18.5.7
-    helm:
-      valueFiles:
-        - environments/hml/global-values.yaml
-        - environments/hml/postgres-values.yaml
+
+  sources:
+    # 🔹 1 - Helm chart remoto
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: postgresql
+      targetRevision: 18.5.7
+      helm:
+        valueFiles:
+          - $values/environments/hml/global-values.yaml
+          - $values/environments/hml/postgres-values.yaml
+
+    # 🔹 2 - Seu repositório com os values
+    - repoURL: https://github.com/reginaldo-opus/test-deploy.git
+      targetRevision: main
+      ref: values
+      path: kong/poc/kong/kong-gitops
+
   destination:
     server: https://kubernetes.default.svc
     namespace: kong
+
   syncPolicy:
     automated:
       prune: true
