@@ -12,6 +12,7 @@ spec:
     chart: postgresql
     targetRevision: 18.5.7
     helm:
+      valueFiles:
         - environments/hml/global-values.yaml
         - environments/hml/postgres-values.yaml
   destination:
