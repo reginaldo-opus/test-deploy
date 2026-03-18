@@ -7,7 +7,7 @@ generatorOptions:
 configMapGenerator:
   - name: kong-deck-state
     files:
-      - kong.yml
+      - kong.yaml
 
 resources:
   - sync-job.yaml
