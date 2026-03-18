@@ -17,7 +17,7 @@ spec:
             - sync
             - --kong-addr
             - http://kong-cp-kong-admin.kong.svc.cluster.local:8001
-            - /workspace/kong.yml   # <-- Arquivo passado direto no final, sem --state
+            - /workspace/kong.yaml
           volumeMounts:
             - name: deck-state-volume
               mountPath: /workspace
