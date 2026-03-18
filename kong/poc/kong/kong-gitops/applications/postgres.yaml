@@ -9,16 +9,15 @@ spec:
   project: default
 
   sources:
-    # 🔹 1 - Helm chart remoto
+    # 1) Chart remoto
     - repoURL: https://charts.bitnami.com/bitnami
       chart: postgresql
       targetRevision: 15.6.0
       helm:
         valueFiles:
-          - $values/environments/hml/global-values.yaml
           - $values/environments/hml/postgres-values.yaml
 
-    # 🔹 2 - Seu repositório com os values
+    # 2) Repo Git com os values
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
       targetRevision: main
       ref: values

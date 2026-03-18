@@ -11,10 +11,9 @@ spec:
   sources:
     - repoURL: https://charts.konghq.com
       chart: kong
-      targetRevision: 2.38.0   # coloque versão real, não 2.x.x
+      targetRevision: 2.38.0
       helm:
         valueFiles:
-          - $values/environments/hml/global-values.yaml
           - $values/environments/hml/kong-cp-values.yaml
 
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git

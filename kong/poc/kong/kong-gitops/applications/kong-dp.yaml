@@ -14,7 +14,6 @@ spec:
       targetRevision: 2.38.0
       helm:
         valueFiles:
-          - $values/environments/hml/global-values.yaml
           - $values/environments/hml/kong-dp-values.yaml
 
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
