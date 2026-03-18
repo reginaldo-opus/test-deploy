@@ -12,9 +12,8 @@ spec:
     chart: postgresql
     targetRevision: 18.5.7
     helm:
-      valueFiles:
-        - ../environments/hml/global-values.yaml
-        - ../environments/hml/postgres-values.yaml
+        - $values/poc/kong/kong-gitops/environments/hml/global-values.yaml
+        - $values/poc/kong/kong-gitops/environments/hml/postgres-values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: kong
