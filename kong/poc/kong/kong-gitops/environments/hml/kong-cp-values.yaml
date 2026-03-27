@@ -79,6 +79,22 @@ proxy:
 ingressController:
   enabled: false
 
+# ---------------------------------------------------------------------------
+# Probes — Kong com 8 plugin servers demora ~40s para init_worker_by_lua no Kind.
+# Defaults do chart Kong (initialDelaySeconds: 5, timeout: 5) são insuficientes.
+# ---------------------------------------------------------------------------
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 5
+
 # 3. Criamos a Secret dinamicamente, garantindo que seja ANTES das migrações usando annotations
 extraObjects:
   - apiVersion: v1

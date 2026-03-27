@@ -71,3 +71,19 @@ proxy:
 
 ingressController:
   enabled: false
+
+# ---------------------------------------------------------------------------
+# Probes — Kong com 8 plugin servers demora ~40s para inicializar no Kind.
+# Os defaults do chart (initialDelaySeconds: 5) matam o pod antes de ficar ready.
+# ---------------------------------------------------------------------------
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 5

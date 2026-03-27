@@ -89,3 +89,18 @@ admin:
 
 ingressController:
   enabled: false
+
+# ---------------------------------------------------------------------------
+# Probes — mesma lógica do CP, o DP com plugins também demora para inicializar
+# ---------------------------------------------------------------------------
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 10
+  failureThreshold: 5

@@ -51,34 +51,31 @@ controller:
 repoServer:
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
+      cpu: 200m
       memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
   # ---------------------------------------------------------------------------
   # Probes — fix definitivo para "context canceled" no health check (chart 9.4.16)
   #
-  # Causa raiz: readinessProbe.timeoutSeconds=1 (default do chart) é insuficiente
-  # para o /healthz do repo-server em clusters com poucos recursos (Kind, minikube).
-  # O health check gRPC travava > 1s → context canceled → pod killed em loop.
-  #
-  # NOTA: O chart ignora httpGet.path customizado (mantém /healthz?full=true na
-  # liveness), mas respeita os timeouts/intervals — que resolve o problema.
+  # Causa raiz: O healthz?full=true compete com GenerateManifest em clusters
+  # com poucos recursos (Kind). O kong.yaml de 849K faz o kustomize demorar
+  # ~6s, bloqueando o health check por mais tempo que o timeout.
   # ---------------------------------------------------------------------------
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 30
-    timeoutSeconds: 10
-    failureThreshold: 3
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    timeoutSeconds: 30
+    failureThreshold: 5
     successThreshold: 1
 
   readinessProbe:
     enabled: true
-    initialDelaySeconds: 15
-    periodSeconds: 15
-    timeoutSeconds: 10
-    failureThreshold: 3
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 15
+    failureThreshold: 5
     successThreshold: 1
