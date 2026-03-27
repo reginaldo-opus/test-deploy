@@ -4,10 +4,12 @@ kind: Kustomization
 generatorOptions:
   disableNameSuffixHash: true
 
+# O arquivo .gz é detectado automaticamente como binário pelo Kustomize
+# e armazenado em binaryData (base64) no ConfigMap — contorna o limite de 1MB.
 configMapGenerator:
   - name: kong-deck-state
     files:
-      - kong.yaml
+      - kong.yaml.gz
 
 resources:
   - sync-job.yaml

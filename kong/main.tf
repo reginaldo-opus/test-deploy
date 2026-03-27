@@ -119,6 +119,18 @@ resource "local_file" "kong_yaml" {
   filename = "${path.module}/output/kong.yaml"
 }
 
+# ---------------------------------------------------------------------------
+# Gzip version — ConfigMaps têm limite de 1MB no etcd.
+# O kong.yaml comprimido cabe em binaryData (~50-80KB para ~850KB de YAML).
+# ---------------------------------------------------------------------------
+resource "terraform_data" "kong_yaml_gz" {
+  depends_on = [local_file.kong_yaml]
+
+  provisioner "local-exec" {
+    command = "gzip -9 -k -f ${local_file.kong_yaml.filename}"
+  }
+}
+
 output "kong_yaml_path" {
   value       = local_file.kong_yaml.filename
   description = "Path to the generated kong.yaml file"

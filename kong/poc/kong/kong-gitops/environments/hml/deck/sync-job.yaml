@@ -9,26 +9,53 @@ metadata:
 spec:
   template:
     spec:
+      # -----------------------------------------------------------------------
+      # 1. initContainer descomprime kong.yaml.gz → kong.yaml em volume compartilhado
+      # -----------------------------------------------------------------------
+      initContainers:
+        - name: decompress
+          image: busybox:1.36
+          command: [sh, -c]
+          args:
+            - |
+              echo "Descomprimindo kong.yaml.gz..."
+              gunzip -c /compressed/kong.yaml.gz > /config/kong.yaml
+              ls -lh /config/kong.yaml
+              echo "OK — $(wc -c < /config/kong.yaml) bytes"
+          volumeMounts:
+            - name: compressed
+              mountPath: /compressed
+              readOnly: true
+            - name: config
+              mountPath: /config
+
+      # -----------------------------------------------------------------------
+      # 2. Container principal executa deck gateway sync com o YAML descomprimido
+      # -----------------------------------------------------------------------
       containers:
         - name: deck
           image: kong/deck:v1.56.0
-          command:
-            - deck
+          command: [deck]
           args:
             - gateway
             - sync
             - /config/kong.yaml
             - --kong-addr
-            # Usar nome curto do service (sem FQDN) — resolve bug de DNS
-            # da musl libc (Alpine) com ndots:5 no Kubernetes.
+            # Nome curto do service — fix musl libc DNS no Alpine
             - http://kong-cp-kong-admin:8001
           volumeMounts:
-            - name: kong-config
+            - name: config
               mountPath: /config
               readOnly: true
+
       volumes:
-        - name: kong-config
+        # Volume com o ConfigMap (binaryData do .gz)
+        - name: compressed
           configMap:
             name: kong-deck-state
+        # Volume temporário para o YAML descomprimido
+        - name: config
+          emptyDir: {}
+
       restartPolicy: Never
   backoffLimit: 2
