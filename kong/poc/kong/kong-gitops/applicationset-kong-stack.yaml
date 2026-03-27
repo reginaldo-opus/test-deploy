@@ -1,0 +1,142 @@
+# ===========================================================================
+# applicationset-kong-stack.yaml — Deploy sequencial com ordem ESTRITA
+#
+# Usa ApplicationSet com RollingSync (Progressive Syncs) para garantir
+# que cada componente SÓ inicia quando o anterior está HEALTHY.
+#
+# Ordem:
+#   Step 1: postgres       → Banco de dados
+#   Step 2: kong-cp        → Control Plane (depende do PG)
+#   Step 3: kong-dp        → Data Plane (depende do CP)
+#   Step 4: kong-deck-hml  → decK sync (depende do CP estar ready)
+#
+# Pré-requisito:
+#   applicationsetcontroller.enable.progressive.syncs: "true"
+#   (configurado em values-argocd.yaml e argocd-cmd-params-cm)
+#
+# IMPORTANTE: RollingSync DESABILITA automated sync automaticamente.
+# O controller gerencia o sync de cada step.
+#
+# Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Progressive-Syncs/
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kong-stack
+  namespace: argocd
+spec:
+  # Go templates — necessário para templatePatch funcionar
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - list:
+        elements:
+          # Step 1: PostgreSQL
+          - name: postgres
+            step: step-1
+            chartRepo: registry-1.docker.io/bitnamicharts
+            chart: postgresql
+            chartVersion: "18.5.7"
+            valuesFile: kong/poc/kong/kong-gitops/environments/hml/postgres-values.yaml
+            type: helm
+
+          # Step 2: Kong Control Plane
+          - name: kong-cp
+            step: step-2
+            chartRepo: https://charts.konghq.com
+            chart: kong
+            chartVersion: "2.38.0"
+            valuesFile: kong/poc/kong/kong-gitops/environments/hml/kong-cp-values.yaml
+            type: helm
+
+          # Step 3: Kong Data Plane
+          - name: kong-dp
+            step: step-3
+            chartRepo: https://charts.konghq.com
+            chart: kong
+            chartVersion: "2.38.0"
+            valuesFile: kong/poc/kong/kong-gitops/environments/hml/kong-dp-values.yaml
+            type: helm
+
+          # Step 4: decK Sync (Kustomize)
+          - name: kong-deck-hml
+            step: step-4
+            chartRepo: https://github.com/reginaldo-opus/test-deploy.git
+            chart: ""
+            chartVersion: "main"
+            valuesFile: kong/poc/kong/kong-gitops/environments/hml/deck
+            type: kustomize
+
+  # -------------------------------------------------------------------------
+  # RollingSync: deploy sequencial
+  # Cada step ESPERA o anterior ficar Healthy antes de sincronizar.
+  # -------------------------------------------------------------------------
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+        - matchExpressions:
+            - key: step
+              operator: In
+              values: [step-1]
+        - matchExpressions:
+            - key: step
+              operator: In
+              values: [step-2]
+        - matchExpressions:
+            - key: step
+              operator: In
+              values: [step-3]
+        - matchExpressions:
+            - key: step
+              operator: In
+              values: [step-4]
+
+  # -------------------------------------------------------------------------
+  # Template base: Helm multi-source
+  # -------------------------------------------------------------------------
+  template:
+    metadata:
+      name: "{{ .name }}"
+      namespace: argocd
+      labels:
+        step: "{{ .step }}"
+    spec:
+      project: default
+      sources:
+        - repoURL: "{{ .chartRepo }}"
+          chart: "{{ .chart }}"
+          targetRevision: "{{ .chartVersion }}"
+          helm:
+            valueFiles:
+              - "$values/{{ .valuesFile }}"
+        - repoURL: https://github.com/reginaldo-opus/test-deploy.git
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: kong
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 5m
+
+  # -------------------------------------------------------------------------
+  # Template Patch: Sobrescreve sources para apps Kustomize (deck)
+  # templatePatch renderiza Go templates → depois parseia como JSON Merge Patch
+  # -------------------------------------------------------------------------
+  templatePatch: |
+    {{- if eq .type "kustomize" }}
+    spec:
+      sources:
+        - repoURL: https://github.com/reginaldo-opus/test-deploy.git
+          targetRevision: main
+          path: {{ .valuesFile }}
+    {{- end }}

@@ -9,7 +9,7 @@ image:
   registry: registry-1.docker.io
   repository: bitnami/postgresql
   # Fixar versão — "latest" pode quebrar entre deploys
-  tag: "16.6.0"
+  tag: "latest"
 
 auth:
   username: kong

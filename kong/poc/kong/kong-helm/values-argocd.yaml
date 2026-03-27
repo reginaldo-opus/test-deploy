@@ -39,6 +39,9 @@ configs:
     server.insecure: "true"
     # Cache de manifests no repo-server (reduz carga gRPC para configs grandes)
     reposerver.default.cache.expiration: 24h
+    # Habilita Progressive Syncs (ApplicationSet rollingSync)
+    # Necessário para deploy sequencial com ordem estrita
+    applicationsetcontroller.enable.progressive.syncs: "true"
   cm:
     # Intervalo de reconciliação: 3 minutos (default: 3m, pode aumentar em prod)
     timeout.reconciliation: 180s
