@@ -19,7 +19,9 @@ spec:
             - sync
             - /config/kong.yaml
             - --kong-addr
-            - http://kong-cp-kong-admin.kong.svc.cluster.local:8001
+            # Usar nome curto do service (sem FQDN) — resolve bug de DNS
+            # da musl libc (Alpine) com ndots:5 no Kubernetes.
+            - http://kong-cp-kong-admin:8001
           volumeMounts:
             - name: kong-config
               mountPath: /config
