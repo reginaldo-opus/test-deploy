@@ -100,7 +100,7 @@ module "brand_services" {
 }
 
 # ---------------------------------------------------------------------------
-# Merge all brands into one kong.yml structure and write to file
+# Merge all brands into one kong.yaml structure and write to file
 # ---------------------------------------------------------------------------
 
 locals {
@@ -116,16 +116,16 @@ locals {
 
 resource "local_file" "kong_yaml" {
   content  = yamlencode(local.kong_config)
-  filename = "${path.module}/output/kong.yml"
+  filename = "${path.module}/output/kong.yaml"
 }
 
 output "kong_yaml_path" {
   value       = local_file.kong_yaml.filename
-  description = "Path to the generated kong.yml file"
+  description = "Path to the generated kong.yaml file"
 }
 
 output "kong_yaml_content" {
   value       = yamlencode(local.kong_config)
-  description = "Content of the generated kong.yml"
+  description = "Content of the generated kong.yaml"
   sensitive   = true
 }

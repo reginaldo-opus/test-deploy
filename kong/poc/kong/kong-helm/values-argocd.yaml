@@ -1,3 +1,7 @@
+global:
+  serverSideApply:
+    forceConflicts: true
+
 server:
   service:
     type: NodePort
@@ -9,20 +13,31 @@ server:
 
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 300m
+      cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 configs:
   params:
-    server.insecure: "true" # Garante que o server aceite conexões HTTP
+    server.insecure: "true"
+    # Cache de manifests no repo-server (reduz carga gRPC)
+    reposerver.default.cache.expiration: 24h
   cm:
     timeout.reconciliation: 180s
 
 redis-ha:
   enabled: false
+
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
 
 controller:
   resources:
@@ -36,8 +51,34 @@ controller:
 repoServer:
   resources:
     requests:
-      cpu: 50m
-      memory: 2Gi 
+      cpu: 100m
+      memory: 256Mi
     limits:
-      cpu: 300m
-      memory: 2Gi
+      cpu: 500m
+      memory: 512Mi
+
+  # ---------------------------------------------------------------------------
+  # Probes — fix definitivo para "context canceled" no health check (chart 9.4.16)
+  #
+  # Causa raiz: readinessProbe.timeoutSeconds=1 (default do chart) é insuficiente
+  # para o /healthz do repo-server em clusters com poucos recursos (Kind, minikube).
+  # O health check gRPC travava > 1s → context canceled → pod killed em loop.
+  #
+  # NOTA: O chart ignora httpGet.path customizado (mantém /healthz?full=true na
+  # liveness), mas respeita os timeouts/intervals — que resolve o problema.
+  # ---------------------------------------------------------------------------
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+    successThreshold: 1
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 3
+    successThreshold: 1

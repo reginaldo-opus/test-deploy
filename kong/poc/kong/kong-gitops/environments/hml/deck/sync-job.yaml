@@ -13,11 +13,20 @@ spec:
         - name: deck
           image: kong/deck:v1.56.0
           command:
-            - /bin/sh
-            - -c
+            - deck
           args:
-            - |
-              echo "Baixando o arquivo kong.yaml e sincronizando rotas..."
-              wget -qO- https://raw.githubusercontent.com/reginaldo-opus/test-deploy/main/kong/poc/kong/kong-gitops/environments/hml/deck/kong.yaml | deck gateway sync --kong-addr http://kong-cp-kong-admin.kong.svc.cluster.local:8001 -
+            - gateway
+            - sync
+            - /config/kong.yaml
+            - --kong-addr
+            - http://kong-cp-kong-admin.kong.svc.cluster.local:8001
+          volumeMounts:
+            - name: kong-config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: kong-config
+          configMap:
+            name: kong-deck-state
       restartPolicy: Never
   backoffLimit: 2

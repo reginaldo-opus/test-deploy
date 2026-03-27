@@ -3,7 +3,7 @@
 #
 # Receives a single brand object and produces the full list of Kong services,
 # routes, and plugins for that brand.  Output is a list of HCL maps that get
-# merged into the top-level kong.yml.
+# merged into the top-level kong.yaml.
 # ============================================================================
 
 locals {
