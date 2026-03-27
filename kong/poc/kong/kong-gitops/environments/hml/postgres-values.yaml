@@ -1,7 +1,18 @@
+# ===========================================================================
+# postgres-values.yaml — PostgreSQL para Kong CP (GitOps via ArgoCD)
+#
+# Bitnami PostgreSQL chart. O Kong CP usa como backend de configuração.
+# Helm release name: "postgres" → service: postgres-postgresql.kong.svc
+#
+# SEGURANÇA: Em produção, usar Sealed Secrets ou External Secrets
+# para as credenciais. Aqui estão em plain text apenas para PoC/HML.
+# ===========================================================================
+
 image:
   registry: registry-1.docker.io
   repository: bitnami/postgresql
-  tag: "latest"
+  # Fixar versão em produção (ex: "16.4.0-debian-12-r8")
+  tag: "16.6.0"
 
 auth:
   username: kong
@@ -16,3 +27,8 @@ primary:
     limits:
       cpu: 500m
       memory: 512Mi
+
+  # Persistence — garante dados entre restarts
+  persistence:
+    enabled: true
+    size: 2Gi

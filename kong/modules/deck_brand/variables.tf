@@ -1,5 +1,13 @@
+# ============================================================================
+# deck_brand/variables.tf — Variáveis do Módulo Brand
+#
+# Recebe o objeto brand completo e variáveis globais.
+# As variáveis de rotas permitem override das rotas padrão definidas
+# em routes_defaults.tf — se vazias, usa os defaults.
+# ============================================================================
+
 variable "brand" {
-  description = "Brand object with all configuration"
+  description = "Objeto completo do brand com toda a configuração (hosts, portas, FQDNs, features, etc.)"
   type        = any
 }
 
@@ -53,6 +61,95 @@ variable "opentelemetry_enabled" {
 # ---------------------------------------------------------------------------
 # Route variables — default values mirror the original project's defaults.
 # Users override these with their actual route definitions from tfvars.
+# ---------------------------------------------------------------------------
+
+variable "routes_status" {
+  type    = any
+  default = []
+}
+
+variable "routes_status_maintenance" {
+  type    = any
+  default = []
+}
+
+variable "routes_consent_payment" {
+  type    = any
+  default = []
+}
+
+variable "routes_consent_data_sharing_v2" {
+  type    = any
+  default = []
+}
+
+variable "routes_consent_data_sharing_v3" {
+  type    = any
+  default = []
+}
+
+variable "routes_consent_credit_portability" {
+  type    = any
+  default = []
+}
+
+variable "routes_consent_oob" {
+  type    = any
+  default = []
+}
+
+variable "routes_consent_as" {
+  type    = any
+  default = []
+}
+
+variable "routes_financial_data" {
+  type    = any
+  default = []
+}
+
+variable "routes_payment" {
+  type    = any
+  default = []
+}
+
+variable "routes_payment_oob" {
+  type    = any
+  default = []
+}
+
+variable "routes_payment_as" {
+  type    = any
+  default = []
+}
+
+variable "routes_open_data" {
+  type    = any
+  default = []
+}
+
+variable "routes_auth_server_fapi" {
+  type    = any
+  default = []
+}
+
+variable "routes_auth_server_fapi_mtls" {
+  type    = any
+  default = []
+}
+
+variable "routes_auth_server_non_fapi" {
+  type    = any
+  default = []
+}
+
+# ---------------------------------------------------------------------------
+# Route override variables
+#
+# Se não-vazio, substitui as rotas padrão de routes_defaults.tf.
+# Isso permite que diferentes ambientes (hml, prod) usem rotas diferentes.
+# Os defaults (local.default_routes_*) cobrem todas as 283 rotas do
+# Open Banking Brasil.
 # ---------------------------------------------------------------------------
 
 variable "routes_status" {

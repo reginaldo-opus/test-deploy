@@ -1,18 +1,75 @@
+# ===========================================================================
+# sync-job.yaml — Kong decK Sync Job (PostSync Hook)
+#
+# Job Kubernetes que aplica a configuração declarativa do Kong via decK.
+# Executado automaticamente pelo ArgoCD APÓS sincronizar todos os recursos.
+#
+# Fluxo:
+#   1. initContainer "wait-kong" → aguarda Kong Admin API estar disponível
+#   2. initContainer "decompress" → gunzip kong.yaml.gz → kong.yaml
+#   3. Container "deck" → deck gateway sync com paralelismo
+#
+# Performance (benchmark com ~75k objetos / 60 brands):
+#   --parallelism 10 (default) → ~46 min
+#   --parallelism 50           → ~10 min
+#
+# NOTAS:
+#   - Usa nome curto do service (musl libc DNS bug no Alpine com ndots:5)
+#   - BeforeHookCreation garante idempotência (remove Job anterior)
+#   - ttlSecondsAfterFinished limpa Jobs completos automaticamente
+# ===========================================================================
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: kong-deck-sync
   namespace: kong
   annotations:
+    # PostSync = executa DEPOIS que todos os recursos da app sincronizaram
     argocd.argoproj.io/hook: PostSync
+    # Remove Job anterior antes de criar novo (evita conflito de nomes)
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
+  # Safety net: timeout de 30 minutos
+  activeDeadlineSeconds: 1800
+  # Limpa Job automaticamente 5 min após completar (mantém logs acessíveis)
+  ttlSecondsAfterFinished: 300
   template:
     spec:
       # -----------------------------------------------------------------------
-      # 1. initContainer descomprime kong.yaml.gz → kong.yaml em volume compartilhado
+      # initContainer 1: Aguarda Kong Admin API estar disponível
+      # Evita falha se o Kong CP ainda estiver inicializando.
+      # Tenta por até 120s (24 tentativas x 5s de intervalo).
       # -----------------------------------------------------------------------
       initContainers:
+        - name: wait-kong
+          image: busybox:1.36
+          command: [sh, -c]
+          args:
+            - |
+              echo "Aguardando Kong Admin API..."
+              for i in $(seq 1 24); do
+                if wget -q --spider http://kong-cp-kong-admin:8001/status 2>/dev/null; then
+                  echo "Kong Admin API disponível!"
+                  exit 0
+                fi
+                echo "Tentativa $i/24 — aguardando 5s..."
+                sleep 5
+              done
+              echo "ERRO: Kong Admin API não respondeu após 120s"
+              exit 1
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+
+        # -----------------------------------------------------------------
+        # initContainer 2: Descomprime kong.yaml.gz → kong.yaml
+        # ConfigMaps têm limite de 1MB no etcd. O .gz contorna isso
+        # armazenando em binaryData (base64) via Kustomize.
+        # -----------------------------------------------------------------
         - name: decompress
           image: busybox:1.36
           command: [sh, -c]
@@ -20,17 +77,31 @@ spec:
             - |
               echo "Descomprimindo kong.yaml.gz..."
               gunzip -c /compressed/kong.yaml.gz > /config/kong.yaml
-              ls -lh /config/kong.yaml
-              echo "OK — $(wc -c < /config/kong.yaml) bytes"
+              SIZE=$(wc -c < /config/kong.yaml)
+              echo "OK — ${SIZE} bytes descomprimidos"
           volumeMounts:
             - name: compressed
               mountPath: /compressed
               readOnly: true
             - name: config
               mountPath: /config
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
 
       # -----------------------------------------------------------------------
-      # 2. Container principal executa deck gateway sync com o YAML descomprimido
+      # Container principal: executa deck gateway sync
+      #
+      # --parallelism 50 → 50 operações concorrentes na Admin API
+      # --silence-events → reduz ruído nos logs
+      # --no-mask-deck-env-vars-value → mostra valores para debug
+      #
+      # IMPORTANTE: Usa nome curto do service (não FQDN)
+      # Fix para bug musl libc DNS no Alpine com ndots:5 no Kubernetes.
       # -----------------------------------------------------------------------
       containers:
         - name: deck
@@ -41,21 +112,30 @@ spec:
             - sync
             - /config/kong.yaml
             - --kong-addr
-            # Nome curto do service — fix musl libc DNS no Alpine
             - http://kong-cp-kong-admin:8001
+            - --parallelism
+            - "50"
           volumeMounts:
             - name: config
               mountPath: /config
               readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
 
       volumes:
-        # Volume com o ConfigMap (binaryData do .gz)
+        # ConfigMap gerado pelo Kustomize (binaryData do .gz)
         - name: compressed
           configMap:
             name: kong-deck-state
-        # Volume temporário para o YAML descomprimido
+        # emptyDir para o YAML descomprimido (vive na memória do nó)
         - name: config
           emptyDir: {}
 
       restartPolicy: Never
-  backoffLimit: 2
+  # Tentativas em caso de falha
+  backoffLimit: 3

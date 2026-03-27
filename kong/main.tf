@@ -1,5 +1,21 @@
+# ===========================================================================
+# main.tf — Kong Deck — Gerador de Configuração Declarativa
+#
+# Este é o ponto de entrada do Terraform. Ele:
+#   1. Recebe a lista de brands (tenants) via terraform.tfvars
+#   2. Instancia o módulo deck_brand para cada brand
+#   3. Mescla todas as configurações em um único kong.yaml
+#   4. Comprime o YAML em kong.yaml.gz para uso como ConfigMap
+#
+# O kong.yaml gerado é compatível com decK (Kong declarative format v3.0).
+#
+# Provider: hashicorp/local (apenas gera arquivos locais — não faz API calls)
+# ===========================================================================
+
 terraform {
   required_providers {
+    # Usamos apenas o provider "local" para gerar o arquivo kong.yaml.
+    # Nenhuma chamada HTTP é feita — diferente do antigo provider greut/kong.
     local = {
       source  = "hashicorp/local"
       version = "~> 2.4"
@@ -13,6 +29,8 @@ terraform {
 # ============================================================================
 
 locals {
+  # Transforma a lista de brands em um mapa indexado por brand_id.
+  # Isso permite usar for_each no módulo (mais eficiente que count).
   brands_map = {
     for brand in var.brands :
     brand.brand_id => brand
@@ -21,10 +39,15 @@ locals {
   component_prefix = var.component_prefix
 
   # ---------------------------------------------------------------------------
-  # Global plugins
+  # Global plugins — aplicados a TODAS as rotas do Kong.
+  #
+  # jsondecode(jsonencode(...)) é um padrão usado para normalizar tipos
+  # dinâmicos do HCL e evitar erros de "inconsistent conditional result types"
+  # quando usamos condicionais (ternários) dentro de listas.
   # ---------------------------------------------------------------------------
   global_plugins = jsondecode(jsonencode(flatten([
     [
+      # Prometheus: métricas de latência, status code, e por consumer
       {
         name      = "prometheus"
         protocols = ["grpc", "grpcs", "http", "https"]
@@ -34,6 +57,8 @@ locals {
           latency_metrics     = true
         }
       },
+      # Pre-function: serializa request/response body para logs
+      # Usa kong.log.set_serialize_value para incluir o body nos logs
       {
         name      = "pre-function"
         protocols = ["grpc", "grpcs", "http", "https"]
@@ -46,6 +71,8 @@ locals {
           ]
         }
       },
+      # Rate limiting global: limite por path (raiz "/")
+      # error_code 529 = "Site is overloaded" (não-padrão, específico OOB)
       {
         name      = "rate-limiting"
         protocols = ["grpc", "grpcs", "http", "https"]
@@ -58,12 +85,14 @@ locals {
           error_code          = 529
         }
       },
+      # Métricas customizadas OOB (plugin Go customizado)
       {
         name      = "oob-kong-custom-metrics"
         protocols = ["grpc", "grpcs", "http", "https"]
         config = {}
       }
     ],
+    # OpenTelemetry: condicional — só ativado se opentelemetry_enabled = true
     var.opentelemetry_enabled ? [
       {
         name      = "opentelemetry"
@@ -79,7 +108,10 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Generate per-brand service configs via the deck_service module
+# Instancia o módulo deck_brand para cada brand/tenant.
+#
+# Cada brand gera ~16 serviços Kong com ~283 rotas (Open Banking Brasil).
+# O for_each usa o brands_map para iterar por brand_id.
 # ---------------------------------------------------------------------------
 
 module "brand_services" {
@@ -100,10 +132,17 @@ module "brand_services" {
 }
 
 # ---------------------------------------------------------------------------
-# Merge all brands into one kong.yaml structure and write to file
+# Merge all brands into one kong.yaml structure and write to file.
+#
+# A estrutura final segue o formato declarativo do decK v3.0:
+#   _format_version: "3.0"
+#   _transform: true         (permite transformações do decK)
+#   plugins: [...]            (plugins globais)
+#   services: [...]           (todos os serviços de todos os brands)
 # ---------------------------------------------------------------------------
 
 locals {
+  # Flatten: transforma [[services_brand1], [services_brand2]] em [s1, s2, ...]
   all_services = flatten([for brand_key, brand_mod in module.brand_services : brand_mod.services])
 
   kong_config = {
@@ -114,14 +153,26 @@ locals {
   }
 }
 
+# ---------------------------------------------------------------------------
+# Gera o arquivo kong.yaml no diretório output/
+# Este é o artefato principal — a configuração declarativa completa do Kong.
+# ---------------------------------------------------------------------------
 resource "local_file" "kong_yaml" {
   content  = yamlencode(local.kong_config)
   filename = "${path.module}/output/kong.yaml"
 }
 
 # ---------------------------------------------------------------------------
-# Gzip version — ConfigMaps têm limite de 1MB no etcd.
-# O kong.yaml comprimido cabe em binaryData (~50-80KB para ~850KB de YAML).
+# Gera kong.yaml.gz — versão comprimida para uso como ConfigMap.
+#
+# ConfigMaps no Kubernetes têm limite de 1MB no etcd.
+# O gzip reduz ~98% do tamanho (ex: 26MB → 514KB).
+#
+# O Kustomize detecta automaticamente arquivos .gz como binários
+# e os armazena em binaryData (base64) no ConfigMap.
+#
+# O sync-job.yaml usa um initContainer (busybox) para descomprimir
+# o .gz antes de passar para o deck CLI.
 # ---------------------------------------------------------------------------
 resource "terraform_data" "kong_yaml_gz" {
   depends_on = [local_file.kong_yaml]
@@ -131,13 +182,17 @@ resource "terraform_data" "kong_yaml_gz" {
   }
 }
 
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
 output "kong_yaml_path" {
   value       = local_file.kong_yaml.filename
-  description = "Path to the generated kong.yaml file"
+  description = "Caminho absoluto do arquivo kong.yaml gerado"
 }
 
 output "kong_yaml_content" {
   value       = yamlencode(local.kong_config)
-  description = "Content of the generated kong.yaml"
+  description = "Conteúdo do kong.yaml (sensível por conter secrets)"
   sensitive   = true
 }

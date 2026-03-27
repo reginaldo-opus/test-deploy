@@ -156,3 +156,24 @@ extraObjects:
         INtHG4KFfLFtUicntVGZxwyYvXlZJxC0K5Ekg7q8NHUx+VOX2cRZoO5zV919tzDl
         5SMLUqGEwbS3oQEwB03aVQ==
         -----END PRIVATE KEY-----
+```
+This is the description of what the code block changes:
+<changeDescription>
+The GitOps CP values already reference postgres-postgresql which matches the ArgoCD app (release name 'postgres' → service 'postgres-postgresql'). Adding a comment to make this clear.
+</changeDescription>
+
+This is the code block that represents the suggested code change:
+```yaml
+# O Helm release "postgres" gera service "postgres-postgresql" no namespace kong.
+  # IMPORTANTE: se o release name mudar, este host precisa mudar também.
+  pg_host: postgres-postgresql.kong.svc.cluster.local
+  pg_port: "5432"
+  pg_user: kong
+  pg_password: kong
+  pg_database: kong
+  pg_ssl: "off"
+  # ...existing code...
+```
+<userPrompt>
+Provide the fully rewritten file, incorporating the suggested code change. You must produce the complete file.
+</userPrompt>

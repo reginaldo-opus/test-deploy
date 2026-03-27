@@ -1,68 +1,113 @@
-# Scripts de Automação
+# Scripts de Automação — Kong Deck
 
-Scripts para gerar e aplicar a configuração do Kong.
+Scripts para gerar, validar e aplicar a configuração do Kong.
+
+## Visão Geral
+
+```mermaid
+flowchart LR
+    subgraph Scripts
+        GEN["generate-and-commit.sh"]
+        LOCAL["deck-local-sync.sh"]
+    end
+
+    subgraph "GitOps (ArgoCD)"
+        GEN -->|"--auto-push"| GIT["Git Push"]
+        GIT --> ARGO["ArgoCD Sync"]
+        ARGO --> JOB["decK Job"]
+    end
+
+    subgraph "Local (sem K8s)"
+        LOCAL --> KONG["Kong Admin API"]
+    end
+
+    TF["terraform apply"] --> GEN
+    TF --> LOCAL
+
+    style GEN fill:#50c878,color:#fff
+    style LOCAL fill:#f5a623,color:#fff
+```
 
 ## generate-and-commit.sh
 
-Fluxo completo de CI/CD: gera o `kong.yaml` via Terraform, valida com decK, copia para a pasta do GitOps e opcionalmente commita e faz push no Git para o ArgoCD detectar.
+Pipeline completo: Terraform → Validação → GitOps → ArgoCD.
 
 ### Uso
 
 ```bash
-# Gerar kong.yaml apenas (sem commit)
+# Gerar kong.yaml apenas
 ./scripts/generate-and-commit.sh
 
-# Gerar, commitar e fazer push
+# Gerar + commit + push (dispara ArgoCD)
 ./scripts/generate-and-commit.sh --auto-push
+
+# Dry-run (apenas terraform plan)
+./scripts/generate-and-commit.sh --dry-run
 ```
 
-### O que faz
+### Fluxo
 
-1. `terraform init` — Inicializa providers
-2. `terraform apply -auto-approve` — Gera `output/kong.yaml`
-3. `deck validate` — Valida o YAML offline (se deck disponível)
-4. Copia `output/kong.yaml` para `poc/kong/kong-gitops/environments/hml/deck/kong.yaml`
-5. Com `--auto-push`:
-   - `git add output/kong.yaml poc/kong/kong-gitops/environments/hml/deck/kong.yaml`
-   - `git commit` com timestamp
-   - `git push`
+```mermaid
+flowchart TD
+    A["terraform init"] --> B["terraform apply"]
+    B --> C{"kong.yaml<br/>gerado?"}
+    C -->|Não| ERR["❌ Erro"]
+    C -->|Sim| D["deck file validate"]
+    D --> E["Mostra stats<br/>(YAML vs GZ)"]
+    E --> F["Copia .gz → GitOps"]
+    F --> G{"--auto-push?"}
+    G -->|Sim| H["git add + commit + push"]
+    G -->|Não| I["Mostra comando manual"]
+    H --> J["✅ ArgoCD sincroniza"]
+
+    style A fill:#4a90d9,color:#fff
+    style J fill:#50c878,color:#fff
+    style ERR fill:#e74c3c,color:#fff
+```
 
 ## deck-local-sync.sh
 
-Aplica o `kong.yaml` diretamente no Kong Admin API via decK, **sem Kubernetes nem ArgoCD**. Útil para testes locais.
+Aplica `kong.yaml` diretamente na Admin API via decK — **sem Kubernetes**.
 
 ### Uso
 
 ```bash
-# Sync completo
+# Sync interativo (mostra diff e pede confirmação)
 KONG_ADMIN_URL=http://localhost:8001 ./scripts/deck-local-sync.sh
 
-# Apenas dump do estado atual (sem aplicar)
-KONG_ADMIN_URL=http://localhost:8001 ./scripts/deck-local-sync.sh --diff-only
+# Apenas mostra diff
+./scripts/deck-local-sync.sh --diff-only
+
+# Sync sem confirmação (CI/CD)
+./scripts/deck-local-sync.sh --yes
 ```
 
-### O que faz
+### Fluxo
 
-1. Valida `output/kong.yaml` offline
-2. Com `--diff-only`: faz dump do estado atual para comparação
-3. Sem flag: pede confirmação, executa `deck gateway sync` (computa diff e aplica apenas as mudanças)
+```mermaid
+flowchart TD
+    A["Valida kong.yaml offline"] --> B["Testa conexão Kong API"]
+    B --> C{"Modo?"}
+    C -->|"--diff-only"| D["deck gateway diff"]
+    C -->|"sync"| E["Mostra diff preview"]
+    E --> F{"Confirmação?"}
+    F -->|Sim| G["deck gateway sync<br/>--parallelism 50"]
+    F -->|Não| H["Abortado"]
+    G --> I["✅ Sync concluído"]
 
-### Variáveis de ambiente
+    style A fill:#4a90d9,color:#fff
+    style I fill:#50c878,color:#fff
+    style H fill:#f39c12,color:#fff
+```
+
+### Variáveis de Ambiente
 
 | Variável | Default | Descrição |
 |---|---|---|
 | `KONG_ADMIN_URL` | `http://localhost:8001` | URL da Kong Admin API |
 
-## Fluxo GitOps (ArgoCD)
-
-O fluxo completo funciona assim:
+## Fluxo GitOps Completo
 
 ```
-Terraform → output/kong.yaml → git push → ArgoCD detecta → Kustomize gera ConfigMap → Job PostSync → deck gateway sync
+terraform apply → kong.yaml.gz → git push → ArgoCD → Kustomize ConfigMap → PostSync Job → deck gateway sync
 ```
-
-1. **Terraform** gera `output/kong.yaml`
-2. **generate-and-commit.sh** copia para a pasta GitOps e faz push
-3. **ArgoCD** detecta a mudança no repo
-4. **Kustomize** (via `kustomization.yaml`) gera o ConfigMap `kong-deck-state` a partir do `kong.yaml`
-5. **Job PostSync** (`sync-job.yaml`) monta o ConfigMap e executa `deck gateway sync`

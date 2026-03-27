@@ -1,4 +1,21 @@
 #!/bin/bash
+# ===========================================================================
+# start.sh — Gerenciador do ambiente Kong + ArgoCD no Kind
+#
+# Script unificado para instalar, desinstalar e verificar status
+# de todo o stack: PostgreSQL + Kong CP/DP + ArgoCD.
+#
+# Uso:
+#   ./start.sh install           # Instala tudo (Kong + ArgoCD)
+#   ./start.sh install-kong      # Apenas Kong (PG + CP + DP)
+#   ./start.sh install-argocd    # Apenas ArgoCD
+#   ./start.sh uninstall         # Remove tudo
+#   ./start.sh uninstall-kong    # Remove apenas Kong
+#   ./start.sh uninstall-argocd  # Remove apenas ArgoCD
+#   ./start.sh status            # Mostra pods, services e credenciais
+#
+# Pré-requisitos: aws, docker, kubectl, helm, kind, openssl
+# ===========================================================================
 set -euo pipefail
 
 ############################################
@@ -23,17 +40,40 @@ KIND_NODE="${KIND_CLUSTER_NAME}-control-plane"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CERTS_DIR="$SCRIPT_DIR/certs"
 
+# Cores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info()  { echo -e "${BLUE}[INFO]${NC}  $*"; }
+log_ok()    { echo -e "${GREEN}[OK]${NC}    $*"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# Timer — mede duração de cada operação
+timer_start() { SECONDS=0; }
+timer_show()  { echo -e "${BLUE}[TIME]${NC}  $1: ${SECONDS}s"; }
+
 ############################################
 # VALIDAÇÕES
 ############################################
 
 check_dependencies() {
+    local missing=()
     for cmd in aws docker kubectl helm kind openssl; do
-        command -v "$cmd" >/dev/null 2>&1 || {
-            echo "Erro: comando '$cmd' não encontrado."
-            exit 1
-        }
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing+=("$cmd")
+        fi
     done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_error "Comandos não encontrados: ${missing[*]}"
+        log_error "Instale antes de continuar."
+        exit 1
+    fi
+    log_ok "Todas as dependências encontradas."
 }
 
 ############################################
@@ -42,7 +82,7 @@ check_dependencies() {
 
 check_aws_login() {
     if ! aws sts get-caller-identity --profile "${AWS_PROFILE}" >/dev/null 2>&1; then
-        echo "Sessão AWS expirada ou inválida. Executando aws sso login..."
+        log_warn "Sessão AWS expirada. Executando aws sso login..."
         aws sso login --profile "${AWS_PROFILE}"
     fi
 }
@@ -50,7 +90,7 @@ check_aws_login() {
 login_ecr() {
     check_aws_login
 
-    echo "Realizando login no ECR..."
+    log_info "Realizando login no ECR..."
     aws ecr get-login-password \
         --region "${AWS_REGION}" \
         --profile "${AWS_PROFILE}" \
@@ -63,31 +103,39 @@ login_ecr() {
 ############################################
 
 import_kong_image() {
-
-    echo "=== Importando imagem do Kong para o KIND ==="
+    timer_start
+    log_info "=== Importando imagem do Kong para o KIND ==="
 
     if ! kind get clusters | grep -q "^${KIND_CLUSTER_NAME}$"; then
-        echo "Cluster kind '${KIND_CLUSTER_NAME}' não encontrado."
+        log_error "Cluster Kind '${KIND_CLUSTER_NAME}' não encontrado."
+        log_info "Crie com: kind create cluster --config kind-config.yaml"
         exit 1
+    fi
+
+    # Verifica se imagem já existe no Kind (evita re-import desnecessário)
+    if docker exec "${KIND_NODE}" ctr -n k8s.io images ls 2>/dev/null | grep -q "${IMAGE_TAG}" ; then
+        log_ok "Imagem já existe no Kind. Pulando import."
+        return 0
     fi
 
     login_ecr
 
-    echo "Pull da imagem original..."
+    log_info "Pull da imagem original..."
     docker pull --platform=linux/amd64 "${FULL_ECR_IMAGE}"
 
-    echo "Carregando imagem no KIND (contornando bug do containerd v2)..."
-    # Solução contornando o erro de "no unpack platforms defined: invalid argument"
+    # Contorna bug containerd v2: "no unpack platforms defined"
+    log_info "Carregando imagem no KIND..."
     docker save "${FULL_ECR_IMAGE}" | docker exec -i "${KIND_NODE}" ctr -n k8s.io images import -
 
-    echo "Validando importação no containerd..."
+    # Valida importação
     docker exec "${KIND_NODE}" \
         ctr -n k8s.io images ls | grep "${ECR_REPO##*/}" >/dev/null || {
-        echo "Falha ao validar imagem importada."
+        log_error "Falha ao validar imagem importada."
         exit 1
     }
 
-    echo "✅ Imagem importada com sucesso no KIND."
+    timer_show "Import de imagem"
+    log_ok "Imagem importada com sucesso no KIND."
 }
 
 ############################################
@@ -95,7 +143,7 @@ import_kong_image() {
 ############################################
 
 add_helm_repos() {
-    echo "=== Atualizando repositórios Helm ==="
+    log_info "=== Atualizando repositórios Helm ==="
     helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
     helm repo add kong https://charts.konghq.com 2>/dev/null || true
     helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
@@ -107,16 +155,16 @@ add_helm_repos() {
 ############################################
 
 install_kong() {
-
-    echo "=== Instalando Kong (modo híbrido) ==="
+    timer_start
+    log_info "=== Instalando Kong (modo híbrido) ==="
 
     import_kong_image
 
     kubectl create ns "$NAMESPACE_KONG" 2>/dev/null || true
 
-    # Certificados TLS cluster
+    # Gera certificados TLS para comunicação CP ↔ DP
     if [ ! -f "$CERTS_DIR/cluster.key" ]; then
-        echo "Gerando certificados do cluster..."
+        log_info "Gerando certificados do cluster..."
         mkdir -p "$CERTS_DIR"
         openssl req -new -x509 -nodes -newkey rsa:2048 \
           -keyout "$CERTS_DIR/cluster.key" \
@@ -125,33 +173,34 @@ install_kong() {
         chmod 600 "$CERTS_DIR/cluster.key"
     fi
 
-    # Secret TLS
+    # Cria Secret TLS (idempotente)
     if ! kubectl get secret kong-cluster-cert -n "$NAMESPACE_KONG" &>/dev/null; then
         kubectl create secret tls kong-cluster-cert -n "$NAMESPACE_KONG" \
           --cert="$CERTS_DIR/cluster.crt" \
           --key="$CERTS_DIR/cluster.key"
     fi
 
-    echo "Instalando PostgreSQL..."
+    log_info "Instalando PostgreSQL..."
     helm upgrade --install postgres-kong bitnami/postgresql \
       -n "$NAMESPACE_KONG" \
       -f "$SCRIPT_DIR/values-pg.yaml" \
       --wait --timeout 5m
 
-    echo "Instalando Kong Control Plane..."
+    log_info "Instalando Kong Control Plane..."
     helm upgrade --install kong-cp kong/kong \
       -n "$NAMESPACE_KONG" \
       -f "$SCRIPT_DIR/values-cp.yaml" \
       --wait --timeout 5m
 
-    echo "Instalando Kong Data Plane..."
+    log_info "Instalando Kong Data Plane..."
     helm upgrade --install kong-dp kong/kong \
       -n "$NAMESPACE_KONG" \
       -f "$SCRIPT_DIR/values-dp.yaml" \
       --wait --timeout 5m
 
+    timer_show "Instalação Kong"
+    log_ok "Kong instalado com sucesso!"
     echo ""
-    echo "✅ Kong instalado com sucesso!"
     kubectl get pods -n "$NAMESPACE_KONG"
 }
 
@@ -160,8 +209,8 @@ install_kong() {
 ############################################
 
 install_argocd() {
-
-    echo "=== Instalando ArgoCD ==="
+    timer_start
+    log_info "=== Instalando ArgoCD ==="
 
     kubectl create ns "$NAMESPACE_ARGOCD" 2>/dev/null || true
 
@@ -170,13 +219,15 @@ install_argocd() {
       -f "$SCRIPT_DIR/values-argocd.yaml" \
       --wait --timeout 5m
 
-    echo ""
-    echo "✅ ArgoCD instalado com sucesso!"
+    timer_show "Instalação ArgoCD"
+    log_ok "ArgoCD instalado com sucesso!"
     kubectl get pods -n "$NAMESPACE_ARGOCD"
 
     echo ""
-    echo "Senha inicial do admin:"
-    echo "kubectl -n $NAMESPACE_ARGOCD get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
+    log_info "Senha inicial do admin:"
+    echo "  kubectl -n $NAMESPACE_ARGOCD get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo"
+    echo ""
+    log_info "UI: http://localhost:30080 (NodePort)"
 }
 
 ############################################
@@ -184,8 +235,7 @@ install_argocd() {
 ############################################
 
 uninstall_kong() {
-
-    echo "=== Removendo Kong ==="
+    log_info "=== Removendo Kong ==="
 
     helm uninstall kong-dp -n "$NAMESPACE_KONG" 2>/dev/null || true
     helm uninstall kong-cp -n "$NAMESPACE_KONG" 2>/dev/null || true
@@ -195,7 +245,7 @@ uninstall_kong() {
     kubectl delete pvc --all -n "$NAMESPACE_KONG" 2>/dev/null || true
     kubectl delete ns "$NAMESPACE_KONG" 2>/dev/null || true
 
-    echo "✅ Kong removido."
+    log_ok "Kong removido."
 }
 
 ############################################
@@ -203,14 +253,13 @@ uninstall_kong() {
 ############################################
 
 uninstall_argocd() {
-
-    echo "=== Removendo ArgoCD ==="
+    log_info "=== Removendo ArgoCD ==="
 
     helm uninstall argocd -n "$NAMESPACE_ARGOCD" 2>/dev/null || true
     kubectl delete pvc --all -n "$NAMESPACE_ARGOCD" 2>/dev/null || true
     kubectl delete ns "$NAMESPACE_ARGOCD" 2>/dev/null || true
 
-    echo "✅ ArgoCD removido."
+    log_ok "ArgoCD removido."
 }
 
 ############################################
@@ -218,14 +267,22 @@ uninstall_argocd() {
 ############################################
 
 status() {
+    echo ""
+    echo -e "${BLUE}━━━ Kong (namespace: $NAMESPACE_KONG) ━━━${NC}"
+    kubectl get pods,svc -n "$NAMESPACE_KONG" 2>/dev/null || log_warn "Namespace não encontrado."
 
     echo ""
-    echo "--- Kong (namespace: $NAMESPACE_KONG) ---"
-    kubectl get pods -n "$NAMESPACE_KONG" 2>/dev/null || echo "Namespace não encontrado."
+    echo -e "${BLUE}━━━ ArgoCD (namespace: $NAMESPACE_ARGOCD) ━━━${NC}"
+    kubectl get pods,svc -n "$NAMESPACE_ARGOCD" 2>/dev/null || log_warn "Namespace não encontrado."
 
+    # Mostra senha do ArgoCD se disponível
     echo ""
-    echo "--- ArgoCD (namespace: $NAMESPACE_ARGOCD) ---"
-    kubectl get pods -n "$NAMESPACE_ARGOCD" 2>/dev/null || echo "Namespace não encontrado."
+    local pwd
+    pwd=$(kubectl -n "$NAMESPACE_ARGOCD" get secret argocd-initial-admin-secret \
+      -o jsonpath='{.data.password}' 2>/dev/null | base64 -d 2>/dev/null) || true
+    if [ -n "$pwd" ]; then
+        echo -e "${GREEN}ArgoCD admin password:${NC} $pwd"
+    fi
 }
 
 ############################################
@@ -239,9 +296,11 @@ install() {
     install_argocd
 
     echo ""
-    echo "=========================================="
-    echo "  Todos os serviços instalados!"
-    echo "=========================================="
+    log_ok "=========================================="
+    log_ok "  Todos os serviços instalados!"
+    log_ok "=========================================="
+    echo ""
+    status
 }
 
 ############################################
@@ -251,7 +310,7 @@ install() {
 uninstall() {
     uninstall_argocd
     uninstall_kong
-    echo "✅ Ambiente totalmente limpo."
+    log_ok "Ambiente totalmente limpo."
 }
 
 ############################################
@@ -259,20 +318,20 @@ uninstall() {
 ############################################
 
 if [ -z "${1:-}" ]; then
-    echo "=========================================="
-    echo "  Kong + ArgoCD - Gerenciador Helm"
-    echo "=========================================="
+    echo -e "${BLUE}==========================================${NC}"
+    echo -e "${BLUE}  Kong + ArgoCD - Gerenciador Helm${NC}"
+    echo -e "${BLUE}==========================================${NC}"
     echo ""
     echo "Uso: ./start.sh <comando>"
     echo ""
     echo "Comandos:"
-    echo "  install           Instalar tudo"
-    echo "  install-kong      Instalar apenas Kong"
+    echo "  install           Instalar tudo (Kong + ArgoCD)"
+    echo "  install-kong      Instalar apenas Kong (PG + CP + DP)"
     echo "  install-argocd    Instalar apenas ArgoCD"
     echo "  uninstall         Remover tudo"
     echo "  uninstall-kong    Remover apenas Kong"
     echo "  uninstall-argocd  Remover apenas ArgoCD"
-    echo "  status            Ver status"
+    echo "  status            Ver pods, services e credenciais"
     echo ""
     exit 1
 fi
@@ -286,7 +345,7 @@ case "$1" in
     uninstall-argocd)   uninstall_argocd ;;
     status)             status ;;
     *)
-        echo "Comando inválido: $1"
+        log_error "Comando inválido: $1"
         exit 1
         ;;
 esac

@@ -1,3 +1,14 @@
+# ===========================================================================
+# postgres.yaml — ArgoCD Application para PostgreSQL
+#
+# Bitnami PostgreSQL chart — banco de dados do Kong Control Plane.
+# sync-wave: 0 (primeiro a subir — dependência do Kong CP)
+#
+# NOTA: syncPolicy.automated está AUSENTE de propósito.
+# O kong-stack (root app) controla o sync via sync-waves.
+# Se tivéssemos automated aqui, a app sincronizaria imediatamente
+# ao ser criada, ignorando a ordem das waves.
+# ===========================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,7 +25,6 @@ spec:
       targetRevision: 18.5.7
       helm:
         valueFiles:
-          # CAMINHO COMPLETO A PARTIR DA RAIZ DO GIT
           - $values/kong/poc/kong/kong-gitops/environments/hml/postgres-values.yaml
 
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
@@ -25,9 +35,15 @@ spec:
     server: https://kubernetes.default.svc
     namespace: kong
 
+  # Sem syncPolicy.automated — o root app (kong-stack) controla a ordem.
+  # selfHeal e prune são herdados do sync do root.
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

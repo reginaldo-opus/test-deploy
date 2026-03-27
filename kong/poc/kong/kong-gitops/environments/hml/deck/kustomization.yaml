@@ -1,15 +1,38 @@
+# ===========================================================================
+# kustomization.yaml — Kustomize para o deck sync
+#
+# Gera ConfigMap "kong-deck-state" a partir do kong.yaml.gz.
+#
+# Fluxo:
+#   1. Terraform → output/kong.yaml (pode ser >1MB)
+#   2. gzip -9   → kong.yaml.gz (~98% menor)
+#   3. generate-and-commit.sh copia .gz para este diretório
+#   4. Kustomize gera ConfigMap com binaryData (base64)
+#   5. sync-job.yaml descomprime e aplica via decK
+#
+# O Kustomize detecta .gz automaticamente como binário
+# e usa binaryData no ConfigMap — contorna limite de 1MB do etcd.
+# ===========================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-generatorOptions:
-  disableNameSuffixHash: true
+# Namespace padrão para todos os recursos gerados
+namespace: kong
 
-# O arquivo .gz é detectado automaticamente como binário pelo Kustomize
-# e armazenado em binaryData (base64) no ConfigMap — contorna o limite de 1MB.
+generatorOptions:
+  # Nome fixo (sem hash suffix) — sync-job referencia "kong-deck-state"
+  disableNameSuffixHash: true
+  # Labels para identificar recursos gerenciados pelo Kustomize
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: kong-deck
+
+# Gera ConfigMap com binaryData a partir do .gz
 configMapGenerator:
   - name: kong-deck-state
     files:
       - kong.yaml.gz
 
+# Job PostSync para executar deck gateway sync
 resources:
   - sync-job.yaml

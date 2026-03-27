@@ -1,6 +1,12 @@
 # ==========================================================
 # GLOBAL VALUES - HML
-# Todas as variáveis compartilhadas ficam aqui
+#
+# Variáveis compartilhadas entre todos os componentes.
+# Referenciadas nos values individuais via {{ .Values.global.* }}
+#
+# NOTA: O nome do service PostgreSQL depende do Helm release name.
+#   ArgoCD release "postgres" → service "postgres-postgresql"
+#   Manual release "postgres-kong" → service "postgres-kong-postgresql"
 # ==========================================================
 
 global:
@@ -21,10 +27,13 @@ global:
 
   postgres:
     repository: bitnami/postgresql
-    tag: "latest"
+    # Fixar versão — "latest" pode quebrar entre deploys
+    tag: "16.6.0"
 
   # --------------------------------------------------------
   # Database
+  # O host depende do Helm release name do PostgreSQL.
+  # ArgoCD: release "postgres" → "postgres-postgresql.kong.svc"
   # --------------------------------------------------------
   database:
     host: postgres-postgresql.kong.svc.cluster.local

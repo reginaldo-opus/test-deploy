@@ -1,3 +1,18 @@
+# ===========================================================================
+# kong-deck.yaml — ArgoCD Application para decK Sync
+#
+# Kustomize: ConfigMap kong-deck-state + Job PostSync.
+# sync-wave: 3 (último — executa SOMENTE após CP e DP estarem Healthy)
+#
+# Fluxo:
+#   1. ArgoCD detecta mudança no kong.yaml.gz no Git
+#   2. Kustomize regenera ConfigMap kong-deck-state (binaryData)
+#   3. PostSync hook dispara Job automaticamente
+#   4. deck gateway sync aplica as mudanças no Kong CP Admin API
+#
+# ServerSideApply é OBRIGATÓRIO para ConfigMaps grandes (binaryData).
+# NOTA: Sem syncPolicy.automated — root app controla a ordem via waves.
+# ===========================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -15,9 +30,12 @@ spec:
     server: https://kubernetes.default.svc
     namespace: kong
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+    retry:
+      limit: 2
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

@@ -5,6 +5,7 @@ image:
 env:
   role: control_plane
   database: postgres
+  # Helm release "postgres-kong" → service "postgres-kong-postgresql"
   pg_host: postgres-kong-postgresql.kong.svc.cluster.local
   pg_port: "5432"
   pg_user: kong

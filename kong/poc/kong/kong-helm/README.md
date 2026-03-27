@@ -1,124 +1,110 @@
-# Kong Gateway + ArgoCD — Kubernetes Local
+# Kong Helm — Setup Manual para Kind
 
-Stack para ambiente local com **Kong Gateway** (modo híbrido) e **ArgoCD**, usando Helm.
-
-## Pré-requisitos
-
-- Kubernetes rodando (Docker Desktop, minikube, kind, etc.)
-- `kubectl` configurado
-- `helm` instalado
-- Acesso ao registry de imagens do Kong (ECR)
-
-## Estrutura
-
-```
-├── start.sh              # Script principal (install/uninstall/status)
-├── values-pg.yaml        # Valores Helm do PostgreSQL
-├── values-cp.yaml        # Valores Helm do Kong Control Plane
-├── values-dp.yaml        # Valores Helm do Kong Data Plane
-├── values-argocd.yaml    # Valores Helm do ArgoCD
-├── certs/                # Certificados TLS do cluster Kong (gerados automaticamente)
-└── README.md
-```
-
-## Instalação
-
-### Instalar tudo (Kong + ArgoCD)
-
-```bash
-./start.sh install
-```
-
-### Instalar apenas Kong
-
-```bash
-./start.sh install-kong
-```
-
-### Instalar apenas ArgoCD
-
-```bash
-./start.sh install-argocd
-```
-
-## Remoção
-
-### Remover tudo
-
-```bash
-./start.sh uninstall
-```
-
-### Remover apenas Kong
-
-```bash
-./start.sh uninstall-kong
-```
-
-### Remover apenas ArgoCD
-
-```bash
-./start.sh uninstall-argocd
-```
-
-## Ver status dos pods
-
-```bash
-./start.sh status
-```
-
-## Acessando os Serviços
-
-### Kong Admin API
-
-```bash
-kubectl port-forward -n kong svc/kong-cp-kong-admin 8001:8001
-```
-Acesse: `http://localhost:9001`
-
-### Kong Manager (GUI)
-
-```bash
-kubectl port-forward -n kong svc/kong-cp-kong-manager 8002:8002
-```
-Acesse: `http://localhost:8002`
-
-### Kong Proxy
-
-```bash
-kubectl port-forward -n kong svc/kong-dp-kong-proxy 9000:80
-```
-Acesse: `http://localhost:9000`
-
-### ArgoCD UI
-
-```bash
-kubectl port-forward -n argocd svc/argocd-server 8080:80
-```
-Acesse: `http://localhost:8080`
-
-- **Usuário:** `admin`
-- **Senha:**
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
-```
-
-### ArgoCD CLI
-
-O `kubectl port-forward` não funciona com o ArgoCD CLI (gRPC/HTTP2 incompatível). Use o modo `--core`:
-
-```bash
-kubectl config set-context --current --namespace=argocd
-argocd login --core
-argocd app list --core
-argocd cluster list --core
-```
+Scripts e values para instalar Kong (modo híbrido) + ArgoCD via Helm no Kind.
 
 ## Componentes
 
-| Componente         | Namespace | Descrição                                   |
-|--------------------|-----------|----------------------------------------------|
-| PostgreSQL         | kong      | Banco de dados do Kong Control Plane         |
-| Kong Control Plane | kong      | Gerencia configurações e roteamento          |
-| Kong Data Plane    | kong      | Processa o tráfego (proxy)                   |
-| ArgoCD             | argocd    | GitOps — deploy contínuo via repositório Git |
+```mermaid
+graph LR
+    subgraph "Helm Releases (namespace: kong)"
+        PG["postgres-kong<br/>bitnami/postgresql"]
+        CP["kong-cp<br/>kong/kong"]
+        DP["kong-dp<br/>kong/kong"]
+    end
+
+    subgraph "Helm Release (namespace: argocd)"
+        ARGO["argocd<br/>argo/argo-cd"]
+    end
+
+    PG --> CP
+    CP -.-> DP
+
+    style PG fill:#336791,color:#fff
+    style CP fill:#003459,color:#fff
+    style DP fill:#00C4B3,color:#fff
+    style ARGO fill:#EF7B4D,color:#fff
+```
+
+## Uso
+
+```bash
+# Instalar tudo (importa imagem ECR + PostgreSQL + Kong CP/DP + ArgoCD)
+./start.sh install
+
+# Apenas Kong
+./start.sh install-kong
+
+# Apenas ArgoCD
+./start.sh install-argocd
+
+# Status (pods + credenciais)
+./start.sh status
+
+# Remover tudo
+./start.sh uninstall
+```
+
+## Arquivos
+
+| Arquivo | Chart | Descrição |
+|---------|-------|-----------|
+| `values-pg.yaml` | `bitnami/postgresql` | PostgreSQL para o Kong CP |
+| `values-cp.yaml` | `kong/kong` | Kong Control Plane (Admin API + cluster) |
+| `values-dp.yaml` | `kong/kong` | Kong Data Plane (proxy) |
+| `values-argocd.yaml` | `argo/argo-cd` | ArgoCD com probes otimizadas para Kind |
+| `start.sh` | — | Script gerenciador (install/uninstall/status) |
+| `certs/` | — | Certificados TLS para cluster CP↔DP (gerados automaticamente) |
+
+## Kong Modo Híbrido
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant DP as Data Plane :8000
+    participant CP as Control Plane :8001
+    participant PG as PostgreSQL
+
+    Note over CP,PG: Inicialização
+    CP->>PG: Conecta e migra schema
+    CP->>CP: Inicia Admin API :8001
+    CP->>CP: Inicia Cluster Listener :8005
+
+    Note over DP,CP: Registro do DP
+    DP->>CP: wss://CP:8005 (mTLS)
+    CP-->>DP: Envia configuração completa
+
+    Note over Client,DP: Runtime
+    Client->>DP: HTTP request
+    DP->>DP: Aplica plugins + proxy
+    DP-->>Client: HTTP response
+```
+
+## Troubleshooting
+
+### Imagem ECR não importa
+
+```bash
+# Verificar login AWS SSO
+aws sts get-caller-identity --profile opus-labs
+
+# Reimportar manualmente
+docker pull <ECR_IMAGE>
+docker save <ECR_IMAGE> | docker exec -i kind-control-plane ctr -n k8s.io images import -
+```
+
+### Kong CP não conecta ao PostgreSQL
+
+```bash
+# Verificar service name
+kubectl get svc -n kong | grep postgres
+# O Helm release "postgres-kong" gera service "postgres-kong-postgresql"
+```
+
+### ArgoCD repo-server em CrashLoopBackOff
+
+Probes muito agressivas. As probes em `values-argocd.yaml` já estão ajustadas para Kind. Se persistir:
+
+```bash
+kubectl -n argocd logs deploy/argocd-repo-server --tail=50
+# Se "context canceled" → aumentar timeoutSeconds nas probes
+```

@@ -1,4 +1,18 @@
+# ===========================================================================
+# values-argocd.yaml — ArgoCD Helm Values
+#
+# Chart: argo/argo-cd (Argo CD)
+# Otimizado para Kind com recursos limitados.
+#
+# Ajustes principais:
+#   - forceConflicts: evita conflito de SSA field ownership
+#   - reposerver cache: reduz carga gRPC ao processar manifests grandes
+#   - Probes relaxadas: evita CrashLoopBackOff em clusters com poucos recursos
+#   - Insecure mode: HTTP puro (sem TLS) — adequado para dev/Kind
+# ===========================================================================
+
 global:
+  # Server-Side Apply — resolve conflitos de ownership em updates
   serverSideApply:
     forceConflicts: true
 
@@ -7,7 +21,8 @@ server:
     type: NodePort
     nodePortHttp: 30080
     nodePortHttps: 30443
-  
+
+  # Modo insecure (HTTP) — em produção, usar TLS com Ingress
   extraArgs:
     - --insecure
 
@@ -22,11 +37,27 @@ server:
 configs:
   params:
     server.insecure: "true"
-    # Cache de manifests no repo-server (reduz carga gRPC)
+    # Cache de manifests no repo-server (reduz carga gRPC para configs grandes)
     reposerver.default.cache.expiration: 24h
   cm:
+    # Intervalo de reconciliação: 3 minutos (default: 3m, pode aumentar em prod)
     timeout.reconciliation: 180s
+    # Dagger refresh rate — otimiza detecção de mudanças
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Healthy"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
 
+# Redis HA desabilitado — desnecessário para dev/Kind
 redis-ha:
   enabled: false
 
@@ -58,11 +89,14 @@ repoServer:
       memory: 1Gi
 
   # ---------------------------------------------------------------------------
-  # Probes — fix definitivo para "context canceled" no health check (chart 9.4.16)
+  # Probes — fix para "context canceled" no health check (chart 9.4.16+)
   #
-  # Causa raiz: O healthz?full=true compete com GenerateManifest em clusters
-  # com poucos recursos (Kind). O kong.yaml de 849K faz o kustomize demorar
-  # ~6s, bloqueando o health check por mais tempo que o timeout.
+  # Causa raiz: healthz?full=true compete com GenerateManifest em clusters
+  # com poucos recursos. O kong.yaml.gz de ~18KB gera um ConfigMap que o
+  # Kustomize processa em ~6s, bloqueando o health check.
+  #
+  # Solução: timeouts e intervals generosos para Kind/minikube.
+  # Em produção com mais CPU, pode reduzir para valores menores.
   # ---------------------------------------------------------------------------
   livenessProbe:
     enabled: true

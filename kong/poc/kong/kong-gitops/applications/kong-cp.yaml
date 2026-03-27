@@ -1,3 +1,16 @@
+# ===========================================================================
+# kong-cp.yaml — ArgoCD Application para Kong Control Plane
+#
+# Helm chart kong/kong 2.38.0 com multi-source (chart + values do Git).
+# sync-wave: 1 (após PostgreSQL estar Healthy, antes do DP e deck)
+#
+# O CP é responsável por:
+#   - Admin API (:8001) — onde o decK aplica a configuração
+#   - Cluster listener (:8005) — distribui config para Data Planes
+#   - Armazenar configuração no PostgreSQL
+#
+# NOTA: Sem syncPolicy.automated — root app controla a ordem via waves.
+# ===========================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,7 +27,6 @@ spec:
       targetRevision: 2.38.0
       helm:
         valueFiles:
-          # CAMINHO COMPLETO A PARTIR DA RAIZ DO GIT
           - $values/kong/poc/kong/kong-gitops/environments/hml/kong-cp-values.yaml
 
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
@@ -26,8 +38,12 @@ spec:
     namespace: kong
 
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

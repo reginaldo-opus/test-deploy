@@ -2,78 +2,78 @@
 
 Gera a configuração declarativa do Kong Gateway (`kong.yaml`) usando Terraform e aplica via [decK](https://docs.konghq.com/deck/latest/) com deploy automático pelo ArgoCD.
 
-## Visão Geral
+## Arquitetura
 
-Este projeto substitui a configuração imperativa do Kong (via Terraform provider direto na Admin API) por uma abordagem **declarativa**:
+```mermaid
+flowchart LR
+    subgraph CI["CI/CD Pipeline"]
+        TF["🔧 Terraform<br/>apply"]
+        GZ["📦 kong.yaml.gz<br/>(gzip -9)"]
+        GIT["📂 Git Push"]
+    end
 
-1. **Terraform** gera um arquivo `kong.yaml` com toda a configuração (services, routes, plugins)
-2. **Git** versiona o arquivo gerado
-3. **ArgoCD** detecta mudanças no repositório e dispara o sync
-4. **decK** aplica a configuração no Kong Admin API via Job Kubernetes (PostSync hook)
+    subgraph K8S["Kubernetes Cluster"]
+        subgraph ARGO["ArgoCD"]
+            DETECT["🔍 Detecta<br/>mudança"]
+            KUST["📋 Kustomize<br/>ConfigMap"]
+        end
+        subgraph KONG["Kong Gateway"]
+            DECK["🔄 decK Sync<br/>(PostSync Job)"]
+            CP["👑 Control Plane<br/>Admin API :8001"]
+            DP["🌐 Data Plane<br/>Proxy :8000"]
+            PG["🗄️ PostgreSQL"]
+        end
+    end
 
+    TF --> GZ --> GIT --> DETECT --> KUST --> DECK --> CP
+    CP <--> PG
+    CP -.->|"wss config"| DP
 ```
-┌─────────────┐     ┌───────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  terraform   │────▶│ kong.yaml │────▶│   git    │────▶│  ArgoCD  │────▶│   decK   │
-│   apply      │     │ (output/) │     │  push    │     │  detect  │     │   sync   │
-└─────────────┘     └───────────┘     └──────────┘     └──────────┘     └──────────┘
-                                                                            │
-                                                                            ▼
-                                                                     ┌──────────┐
-                                                                     │   Kong   │
-                                                                     │ Admin API│
-                                                                     └──────────┘
-```
+
+## Como Funciona
+
+| Etapa | O que acontece |
+|-------|---------------|
+| 1. `terraform apply` | Gera `output/kong.yaml` com todos os services, routes e plugins |
+| 2. `gzip -9` | Comprime ~98% (ex: 26MB → 514KB) para caber em ConfigMap |
+| 3. `git push` | Versiona o `.gz` no repositório Git |
+| 4. ArgoCD detecta | Mudança no `.gz` = novo hash no ConfigMap |
+| 5. Kustomize gera | ConfigMap `kong-deck-state` com `binaryData` |
+| 6. PostSync Job | Descomprime → `deck gateway sync --parallelism 50` |
+| 7. Kong atualizado | decK computa diff e aplica apenas as mudanças |
 
 ## Estrutura do Projeto
 
-```
-kong-deck/
-├── README.md                      # Este arquivo
-├── main.tf                        # Terraform principal — monta o kong.yaml
-├── variables.tf                   # Variáveis de entrada
-├── terraform.tfvars.example       # Exemplo de configuração
-├── terraform.tfvars               # Configuração real (gitignored)
-│
-├── modules/                       # Módulos Terraform
-│   ├── README.md
-│   ├── deck_brand/                # Orquestra serviços por brand/tenant
-│   │   ├── main.tf
-│   │   ├── routes_defaults.tf     # 283 rotas padrão (Open Banking Brasil)
-│   │   └── variables.tf
-│   └── deck_service/              # Gera um service Kong com routes e plugins
-│       ├── main.tf
-│       └── variables.tf
-│
-├── poc/                           # Ambiente GitOps completo
-│   └── kong/
-│       ├── kind-config.yaml       # Config do kind cluster
-│       └── kong-gitops/
-│           ├── applications/      # ArgoCD Application manifests
-│           │   ├── kong-root.yaml # App-of-Apps raiz
-│           │   ├── kong-cp.yaml   # Kong Control Plane
-│           │   ├── kong-dp.yaml   # Kong Data Plane
-│           │   ├── kong-deck.yaml # decK sync (Kustomize)
-│           │   └── postgres.yaml  # PostgreSQL
-│           └── environments/
-│               └── hml/
-│                   ├── deck/
-│                   │   ├── kustomization.yaml  # Gera ConfigMap kong-deck-state
-│                   │   ├── kong.yaml           # Configuração declarativa do Kong
-│                   │   └── sync-job.yaml       # Job PostSync (deck gateway sync)
-│                   ├── kong-cp-values.yaml
-│                   ├── kong-dp-values.yaml
-│                   └── postgres-values.yaml
-│
-├── scripts/                       # Scripts de automação
-│   ├── README.md
-│   ├── generate-and-commit.sh     # Gera kong.yaml e faz git push
-│   └── deck-local-sync.sh        # Aplica localmente via decK
-│
-├── output/                        # Gerado pelo Terraform
-│   └── kong.yaml                  # Configuração declarativa completa
-│
-└── docs/                          # Documentação adicional
-    └── COMPATIBILITY_REPORT.md    # Relatório de compatibilidade com projeto anterior
+```mermaid
+graph TD
+    ROOT["kong-deck/"]
+
+    ROOT --> MAIN["main.tf — Ponto de entrada Terraform"]
+    ROOT --> VARS["variables.tf — Variáveis de entrada"]
+    ROOT --> TFVARS["terraform.tfvars — Configuração do ambiente"]
+
+    ROOT --> MODULES["modules/"]
+    MODULES --> BRAND["deck_brand/ — Orquestra 16 services por brand"]
+    MODULES --> SVC["deck_service/ — Gera 1 service + routes + plugins"]
+
+    ROOT --> POC["poc/kong/"]
+    POC --> GITOPS["kong-gitops/ — Manifests ArgoCD"]
+    POC --> HELM["kong-helm/ — Setup manual (Kind)"]
+
+    GITOPS --> APPS["applications/ — App-of-Apps"]
+    GITOPS --> ENVS["environments/hml/ — Values + deck sync"]
+
+    ROOT --> SCRIPTS["scripts/"]
+    SCRIPTS --> GEN["generate-and-commit.sh"]
+    SCRIPTS --> LOCAL["deck-local-sync.sh"]
+
+    ROOT --> OUTPUT["output/"]
+    OUTPUT --> YAML["kong.yaml — Config gerada"]
+
+    style ROOT fill:#4a90d9,color:#fff
+    style MODULES fill:#50c878,color:#fff
+    style POC fill:#f5a623,color:#fff
+    style SCRIPTS fill:#9b59b6,color:#fff
 ```
 
 ## Pré-requisitos
@@ -82,8 +82,10 @@ kong-deck/
 |---|---|---|
 | **Terraform** | >= 1.3 | Gerar o `kong.yaml` |
 | **decK** | v1.56.0 | Validar e aplicar a config |
-| **kubectl** | >= 1.24 | Aplicar manifests K8s |
+| **kubectl** | >= 1.24 | Interagir com Kubernetes |
 | **ArgoCD** | >= 2.5 | GitOps (no cluster) |
+| **Kind** | >= 0.20 | Cluster local (dev) |
+| **Helm** | >= 3.12 | Instalar charts |
 
 ## Início Rápido
 
@@ -91,7 +93,7 @@ kong-deck/
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars
-# Edite terraform.tfvars com os valores do seu ambiente
+# Edite com os valores do seu ambiente
 ```
 
 ### 2. Gerar kong.yaml
@@ -99,71 +101,69 @@ cp terraform.tfvars.example terraform.tfvars
 ```bash
 terraform init
 terraform apply
-# Arquivo gerado em output/kong.yaml
+# → output/kong.yaml + output/kong.yaml.gz
 ```
 
-### 3. Validar localmente (opcional)
+### 3. Validar localmente
 
 ```bash
-deck file validate output/kong.yaml
+deck file validate -s output/kong.yaml
 ```
 
-### 4. Testar localmente (sem ArgoCD)
+### 4. Testar sem ArgoCD
 
 ```bash
 KONG_ADMIN_URL=http://localhost:8001 ./scripts/deck-local-sync.sh
 ```
 
-### 5. Deploy via ArgoCD
+### 5. Deploy via ArgoCD (GitOps)
 
 ```bash
 # Gera, valida, commita e faz push — ArgoCD sincroniza automaticamente
 ./scripts/generate-and-commit.sh --auto-push
 ```
 
-## Como Funciona o Deploy (GitOps)
+## Fluxo GitOps Detalhado
 
-### Fluxo Completo
+```mermaid
+sequenceDiagram
+    participant Dev as 👨‍💻 Developer
+    participant TF as Terraform
+    participant Git as Git Repo
+    participant Argo as ArgoCD
+    participant Kust as Kustomize
+    participant Job as decK Job
+    participant Kong as Kong Admin API
 
+    Dev->>TF: terraform apply
+    TF->>TF: Gera kong.yaml + kong.yaml.gz
+    Dev->>Git: git push (kong.yaml.gz)
+
+    Git-->>Argo: Webhook / Poll (mudança detectada)
+    Argo->>Kust: Renderiza manifests
+    Kust->>Kust: configMapGenerator (binaryData)
+    Argo->>Argo: Sync ConfigMap + Job
+
+    Note over Job: PostSync Hook
+    Job->>Job: gunzip kong.yaml.gz
+    Job->>Job: wait-kong (health check)
+    Job->>Kong: deck gateway sync --parallelism 50
+    Kong-->>Job: Diff aplicado ✅
+
+    Note over Kong: Services, Routes e Plugins atualizados
 ```
-1. terraform apply                  → Gera output/kong.yaml
-2. generate-and-commit.sh           → Copia para GitOps deck/ e faz git push
-3. ArgoCD detecta                   → Mudança no kong.yaml = novo hash no ConfigMap
-4. Kustomize configMapGenerator     → Gera ConfigMap "kong-deck-state" com kong.yaml
-5. PostSync Job (sync-job.yaml)     → Monta ConfigMap como volume, executa deck gateway sync
-6. Kong atualizado                  → Services, routes e plugins refletem o YAML
-```
 
-O `deck gateway sync` computa um diff entre o estado atual do Kong e o `kong.yaml`, aplicando apenas as mudanças necessárias — sem downtime e sem resetar a configuração existente.
-
-### Rollback
+## Rollback
 
 ```bash
 git revert <commit>
 git push
-# ArgoCD detecta → restaura o kong.yaml anterior automaticamente
+# ArgoCD detecta → restaura kong.yaml anterior automaticamente
 ```
-
-## Plugins Customizados
-
-10 plugins OOB utilizados:
-
-| Plugin | Escopo | Função |
-|--------|--------|--------|
-| `oob-error-handler` | Service | Padroniza respostas de erro |
-| `oob-fapi-interaction-id` | Service | Valida/gera x-fapi-interaction-id |
-| `oob-token-introspection` | Route | Validação de tokens OAuth2 |
-| `oob-api-event` | Route | Publica eventos de API |
-| `oob-route-block` | Route | Bloqueio de rotas por data regulatória |
-| `oob-mqd-event` | Route | Eventos MQD (qualidade de dados) |
-| `oob-ocsp-validator` | Service | Validação OCSP de certificados |
-| `oob-operational-limits` | Route | Limites operacionais |
-| `oob-kong-consumer-handler` | Service | Gerenciamento de consumers |
-| `oob-kong-custom-metrics` | Global | Métricas customizadas |
 
 ## Multi-Brand / Multi-Tenant
 
-Cada entrada no array `brands` em `terraform.tfvars` gera um conjunto completo de 16 serviços Kong. Para adicionar um brand:
+Cada entrada no array `brands` em `terraform.tfvars` gera 16 serviços Kong (~283 rotas). Para adicionar um brand:
 
 ```hcl
 brands = [
@@ -172,57 +172,93 @@ brands = [
 ]
 ```
 
-## Migração do Projeto Original
+```mermaid
+graph LR
+    subgraph Terraform
+        B1["Brand 1"] --> S1["16 services<br/>~283 routes"]
+        B2["Brand 2"] --> S2["16 services<br/>~283 routes"]
+        BN["Brand N"] --> SN["16 services<br/>~283 routes"]
+    end
 
-| Aspecto | Projeto original (`kong/`) | Este projeto (`kong-deck/`) |
-|---|---|---|
-| **Provider** | `greut/kong` (HTTP calls) | `hashicorp/local` (gera arquivo) |
-| **Output** | Recursos no Kong via API | Arquivo `kong.yaml` declarativo |
-| **Aplicação** | Terraform apply direto | decK sync (via Job K8s) |
-| **Velocidade** | Centenas de API calls | 1 batch operation |
-| **State** | tfstate com recursos Kong | tfstate mínimo (1 arquivo local) |
+    S1 --> YAML["kong.yaml"]
+    S2 --> YAML
+    SN --> YAML
 
-As **variáveis de entrada são idênticas** — copie seu `terraform.tfvars` do projeto `kong/` e adicione as variáveis do ArgoCD.
+    YAML --> DECK["decK sync"]
+    DECK --> KONG["Kong Gateway"]
+```
 
-Veja [docs/COMPATIBILITY_REPORT.md](docs/COMPATIBILITY_REPORT.md) para a análise completa.
+## Plugins
+
+### Globais (aplicados a todas as rotas)
+
+| Plugin | Função |
+|--------|--------|
+| `prometheus` | Métricas de latência, status code e por consumer |
+| `pre-function` | Serializa request/response body para logs |
+| `rate-limiting` | Limite global por path (`/`) |
+| `oob-kong-custom-metrics` | Métricas customizadas OOB |
+| `opentelemetry` | Traces distribuídos (condicional) |
+
+### Por Service
+
+| Plugin | Função |
+|--------|--------|
+| `cors` | Cross-Origin Resource Sharing |
+| `rate-limiting` | Limite por IP por minuto |
+| `oob-error-handler` | Padroniza respostas de erro |
+| `oob-fapi-interaction-id` | Header FAPI obrigatório |
+| `oob-kong-consumer-handler` | Gerenciamento de consumers |
+| `oob-ocsp-validator` | Validação OCSP de certificados |
+
+### Por Route
+
+| Plugin | Função |
+|--------|--------|
+| `oob-token-introspection` | Validação de tokens OAuth2 |
+| `request-transformer` | Manipulação de headers de request |
+| `oob-api-event` | Publicação de eventos de API |
+| `oob-route-block` | Bloqueio por data regulatória |
+| `oob-mqd-event` | Eventos MQD (qualidade de dados) |
+| `oob-operational-limits` | Limites operacionais por rota |
 
 ## Troubleshooting
 
-### deck sync falha com "connection refused"
+### decK sync falha com "connection refused"
 
-O Job não alcança a Kong Admin API. Verifique:
-- O endpoint `kong-cp-kong-admin.kong.svc.cluster.local:8001` está acessível
-- O Kong Control Plane (sync-wave: 1) subiu antes do deck job (sync-wave: 3)
+```bash
+# Verificar se Kong CP está rodando
+kubectl get pods -n kong -l app.kubernetes.io/component=app
+# Verificar endpoint
+kubectl get svc kong-cp-kong-admin -n kong
+```
 
 ### ArgoCD não detecta mudanças
 
-O Kustomize gera ConfigMap com hash do conteúdo. Se `kong.yaml` não mudou, ArgoCD não sincroniza.
-
-### Plugins customizados não encontrados
-
-Os plugins OOB devem estar **instalados no Kong**. O decK apenas configura plugins já disponíveis.
-
-### ArgoCD CLI não conecta (port-forward falha)
-
-O `kubectl port-forward` não suporta gRPC/HTTP2, que o ArgoCD CLI usa. Duas causas comuns:
-
-1. **kubectl desatualizado** — Kubernetes suporta skew de ±1 minor version. Verifique com `kubectl version --client`.
-2. **gRPC incompatível com port-forward** — Mesmo com kubectl atualizado, o port-forward pode falhar com gRPC.
-
-**Solução:** Use o modo `--core`, que fala direto com a Kubernetes API sem precisar do ArgoCD server:
+O Kustomize gera ConfigMap com hash do conteúdo. Se `kong.yaml.gz` não mudou, ArgoCD não sincroniza. Verifique:
 
 ```bash
-kubectl config set-context --current --namespace=argocd
-argocd login --core
-argocd app list --core
-argocd cluster list --core
+# Forçar sync manual
+argocd app sync kong-deck-hml --force
 ```
 
-Todos os comandos `argocd` aceitam a flag `--core`.
+### Repo-server CrashLoopBackOff
 
-## Referências
+Probes muito agressivas para Kind. As probes já estão ajustadas em `values-argocd.yaml`. Se persistir:
 
-- [decK Documentation](https://docs.konghq.com/deck/latest/)
-- [Kong Declarative Config](https://docs.konghq.com/gateway/latest/production/deployment-topologies/db-less-and-declarative-config/)
-- [ArgoCD Resource Hooks](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_hooks/)
-- [Kustomize ConfigMapGenerator](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/configmapgenerator/)
+```bash
+kubectl -n argocd logs deploy/argocd-repo-server --tail=50
+```
+
+## Migração do Projeto Original
+
+| Aspecto | Antigo (`kong/`) | Novo (`kong-deck/`) |
+|---|---|---|
+| **Provider** | `greut/kong` (HTTP calls) | `hashicorp/local` (gera arquivo) |
+| **Output** | Recursos via API | Arquivo `kong.yaml` declarativo |
+| **Aplicação** | Terraform apply direto | decK sync (Job K8s) |
+| **Velocidade** | Centenas de API calls | 1 batch operation |
+| **State** | tfstate com recursos Kong | tfstate mínimo (1 arquivo) |
+| **Rollback** | `terraform destroy` | `git revert` |
+
+Veja [docs/COMPATIBILITY_REPORT.md](docs/COMPATIBILITY_REPORT.md) para a análise completa.

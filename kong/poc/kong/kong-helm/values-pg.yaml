@@ -1,7 +1,15 @@
+# ===========================================================================
+# values-pg.yaml — PostgreSQL para Kong CP (instalação manual via Helm)
+#
+# Bitnami PostgreSQL. Usado pelo start.sh para setup local com Kind.
+# Em produção, usar Sealed Secrets ou External Secrets para credenciais.
+# ===========================================================================
+
 image:
   registry: registry-1.docker.io
   repository: bitnami/postgresql
-  tag: "latest"
+  # Fixar versão — "latest" pode quebrar entre deploys
+  tag: "16.6.0"
 
 auth:
   username: kong
@@ -16,3 +24,7 @@ primary:
     limits:
       cpu: 500m
       memory: 512Mi
+
+  persistence:
+    enabled: true
+    size: 2Gi

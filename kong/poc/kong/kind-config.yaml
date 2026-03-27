@@ -1,14 +1,43 @@
+# ===========================================================================
+# kind-config.yaml — Configuração do cluster Kind para Kong + ArgoCD
+#
+# Kind (Kubernetes IN Docker) — cluster local para desenvolvimento.
+#
+# Port mappings:
+#   80    → Kong DP proxy HTTP (via NodePort)
+#   443   → Kong DP proxy HTTPS (via NodePort)
+#   8001  → Kong CP Admin API (via NodePort 30001)
+#   30080 → ArgoCD UI (via NodePort)
+#
+# Aumentamos recursos do nó para suportar:
+#   - PostgreSQL + Kong CP (8 plugin servers) + Kong DP + ArgoCD
+# ===========================================================================
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 80
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 443
-    hostPort: 443
-    protocol: TCP
-  - containerPort: 8001
-    hostPort: 8001
-    protocol: TCP
+  - role: control-plane
+    extraPortMappings:
+      # Kong DP proxy HTTP
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      # Kong DP proxy HTTPS
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # Kong CP Admin API (NodePort 30001)
+      - containerPort: 30001
+        hostPort: 8001
+        protocol: TCP
+      # ArgoCD UI (NodePort 30080)
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+    # Aumenta limites de recursos para evitar OOMKill e throttling
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        # Reserva mínima de recursos para o sistema
+        evictionHard:
+          memory.available: "200Mi"
+          nodefs.available: "10%"

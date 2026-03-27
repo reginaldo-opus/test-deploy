@@ -1,69 +1,135 @@
 #!/usr/bin/env bash
 # ===========================================================================
-# generate-and-commit.sh
+# generate-and-commit.sh — Pipeline de Geração e Deploy da Config Kong
 #
-# Runs Terraform to generate kong.yaml + kong.yaml.gz, copies the gzip to
-# the GitOps deck folder, and optionally commits and pushes so ArgoCD can
-# detect the change and sync.
+# Fluxo completo CI/CD:
+#   1. terraform init + apply  → Gera output/kong.yaml + kong.yaml.gz
+#   2. deck file validate      → Valida estrutura offline
+#   3. Stats de compressão     → Mostra tamanho YAML vs GZ
+#   4. Copia kong.yaml.gz      → Diretório GitOps do ArgoCD
+#   5. (Opcional) commit + push → Dispara sync no ArgoCD
 #
-# Usage:
-#   ./scripts/generate-and-commit.sh [--auto-push]
+# Uso:
+#   ./scripts/generate-and-commit.sh              # Gerar apenas
+#   ./scripts/generate-and-commit.sh --auto-push  # Gerar + commit + push
+#   ./scripts/generate-and-commit.sh --dry-run    # Terraform plan apenas
+#
+# Pré-requisitos: terraform >= 1.3, deck CLI (opcional), git (se --auto-push)
 # ===========================================================================
 set -euo pipefail
 
+# Cores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info()  { echo -e "${BLUE}==>${NC} $*"; }
+log_ok()    { echo -e "${GREEN}==>${NC} $*"; }
+log_warn()  { echo -e "${YELLOW}==>${NC} $*"; }
+log_error() { echo -e "${RED}==>${NC} $*" >&2; }
+
+# Resolve caminhos relativos ao diretório do script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 OUTPUT_DIR="${PROJECT_DIR}/output"
 GITOPS_DECK_DIR="${PROJECT_DIR}/poc/kong/kong-gitops/environments/hml/deck"
 
+DRY_RUN=false
+AUTO_PUSH=false
+
+# Parse argumentos
+for arg in "$@"; do
+  case "$arg" in
+    --auto-push) AUTO_PUSH=true ;;
+    --dry-run)   DRY_RUN=true ;;
+    --help|-h)
+      echo "Uso: $0 [--auto-push] [--dry-run]"
+      echo "  --auto-push  Gerar, commitar e fazer push (dispara ArgoCD)"
+      echo "  --dry-run    Apenas terraform plan (sem aplicar)"
+      exit 0
+      ;;
+  esac
+done
+
 cd "${PROJECT_DIR}"
 
-echo "==> Running Terraform init..."
-terraform init -input=false
+# --- Passo 1: Terraform init + apply ---
+log_info "Terraform init..."
+terraform init -input=false -no-color
 
-echo "==> Running Terraform apply to generate kong.yaml + kong.yaml.gz..."
-terraform apply -auto-approve -input=false
+if [ "${DRY_RUN}" = true ]; then
+  log_info "Terraform plan (dry-run)..."
+  terraform plan -input=false
+  log_ok "Dry-run concluído. Nenhuma mudança aplicada."
+  exit 0
+fi
 
+log_info "Terraform apply → kong.yaml + kong.yaml.gz..."
+SECONDS=0
+terraform apply -auto-approve -input=false -no-color
+log_ok "Terraform apply concluído em ${SECONDS}s"
+
+# Verifica se YAML foi gerado
 if [ ! -f "${OUTPUT_DIR}/kong.yaml" ]; then
-  echo "ERROR: kong.yaml was not generated at ${OUTPUT_DIR}/kong.yaml"
+  log_error "kong.yaml não foi gerado em ${OUTPUT_DIR}/kong.yaml"
   exit 1
 fi
 
+# Fallback: gera .gz manualmente se Terraform não gerou
 if [ ! -f "${OUTPUT_DIR}/kong.yaml.gz" ]; then
-  echo "WARN: kong.yaml.gz not found, generating manually..."
+  log_warn "kong.yaml.gz não encontrado, gerando manualmente..."
   gzip -9 -k -f "${OUTPUT_DIR}/kong.yaml"
 fi
 
-echo "==> Validating generated kong.yaml with deck..."
+# --- Passo 2: Validação offline com deck ---
+log_info "Validando kong.yaml..."
 if command -v deck &> /dev/null; then
-  deck validate -s "${OUTPUT_DIR}/kong.yaml"
-  echo "    Validation passed."
+  if deck file validate -s "${OUTPUT_DIR}/kong.yaml"; then
+    log_ok "Validação deck OK"
+  else
+    log_error "Validação deck FALHOU. Corrija antes de continuar."
+    exit 1
+  fi
 else
-  echo "    WARN: deck CLI not found, skipping validation."
+  log_warn "deck CLI não encontrado — pulando validação."
 fi
 
+# --- Passo 3: Stats de compressão ---
 YAML_SIZE=$(wc -c < "${OUTPUT_DIR}/kong.yaml")
 GZ_SIZE=$(wc -c < "${OUTPUT_DIR}/kong.yaml.gz")
-RATIO=$(( (GZ_SIZE * 100) / YAML_SIZE ))
-echo "==> kong.yaml: ${YAML_SIZE} bytes → kong.yaml.gz: ${GZ_SIZE} bytes (${RATIO}% of original)"
+if [ "${YAML_SIZE}" -gt 0 ]; then
+  RATIO=$(( (GZ_SIZE * 100) / YAML_SIZE ))
+else
+  RATIO=0
+fi
+YAML_HR=$(numfmt --to=iec "${YAML_SIZE}" 2>/dev/null || echo "${YAML_SIZE}B")
+GZ_HR=$(numfmt --to=iec "${GZ_SIZE}" 2>/dev/null || echo "${GZ_SIZE}B")
+log_info "kong.yaml: ${YAML_HR} → kong.yaml.gz: ${GZ_HR} (${RATIO}% do original)"
 
-echo "==> Copying kong.yaml.gz to GitOps deck folder..."
+# --- Passo 4: Copiar .gz para diretório GitOps ---
+log_info "Copiando kong.yaml.gz para GitOps deck/..."
+mkdir -p "${GITOPS_DECK_DIR}"
 cp "${OUTPUT_DIR}/kong.yaml.gz" "${GITOPS_DECK_DIR}/kong.yaml.gz"
-echo "    Copied to ${GITOPS_DECK_DIR}/kong.yaml.gz"
+log_ok "Copiado para ${GITOPS_DECK_DIR}/kong.yaml.gz"
 
-if [ "${1:-}" = "--auto-push" ]; then
+# --- Passo 5: (Opcional) Commit e push ---
+if [ "${AUTO_PUSH}" = true ]; then
   cd "${PROJECT_DIR}"
-  git add output/kong.yaml output/kong.yaml.gz poc/kong/kong-gitops/environments/hml/deck/kong.yaml.gz
+  # Adiciona apenas os artefatos comprimidos (não o YAML grande)
+  git add output/kong.yaml.gz poc/kong/kong-gitops/environments/hml/deck/kong.yaml.gz
+
   if git diff --cached --quiet; then
-    echo "==> No changes detected. Nothing to commit."
+    log_ok "Sem mudanças detectadas. Nada para commitar."
   else
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     git commit -m "chore(kong): update kong.yaml.gz declarative config [${TIMESTAMP}]"
     git push
-    echo "==> Changes pushed. ArgoCD will detect and sync automatically."
+    log_ok "Push realizado. ArgoCD irá detectar e sincronizar automaticamente."
   fi
 else
   echo ""
-  echo "To commit and push (triggering ArgoCD sync), run:"
-  echo "  git add output/kong.yaml.gz poc/kong/kong-gitops/environments/hml/deck/kong.yaml.gz && git commit -m 'update kong config' && git push"
+  log_info "Para disparar o ArgoCD, execute:"
+  echo "  $0 --auto-push"
 fi

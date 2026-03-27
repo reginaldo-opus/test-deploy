@@ -1,8 +1,26 @@
+# ===========================================================================
+# kong-root.yaml — ArgoCD App-of-Apps (raiz)
+#
+# Application raiz que gerencia todas as sub-Applications.
+# Padrão "App-of-Apps": aponta para applications/ que contém os manifests.
+#
+# Hierarquia de sync-wave (ordem de deploy):
+#   wave 0: postgres     — Banco de dados (dependência do Kong CP)
+#   wave 1: kong-cp      — Kong Control Plane (Admin API + cluster mgmt)
+#   wave 2: kong-dp      — Kong Data Plane (proxy — depende do CP)
+#   wave 3: kong-deck    — decK sync (depende do CP estar ready)
+#
+# selfHeal: true → ArgoCD reverte mudanças manuais automaticamente
+# prune: true    → ArgoCD remove recursos que não existem mais no Git
+# ===========================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: kong-stack
   namespace: argocd
+  # Finalizer garante que sub-Applications são removidas ao deletar o root
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io/foreground
 spec:
   project: default
   source:
@@ -16,3 +34,10 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    # Retry automático em caso de falha transitória (ex: CRD ainda não pronto)
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

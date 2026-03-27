@@ -1,3 +1,16 @@
+# ===========================================================================
+# kong-dp.yaml — ArgoCD Application para Kong Data Plane
+#
+# Helm chart kong/kong 2.38.0 com multi-source.
+# sync-wave: 2 (após CP estar Healthy, antes do deck sync)
+#
+# O DP é responsável por:
+#   - Proxy de requests (:8000/:8443)
+#   - Executar plugins (Go plugin servers)
+#   - Zero downtime — recebe config do CP via websocket automaticamente
+#
+# NOTA: Sem syncPolicy.automated — root app controla a ordem via waves.
+# ===========================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,7 +27,6 @@ spec:
       targetRevision: 2.38.0
       helm:
         valueFiles:
-          # CAMINHO COMPLETO A PARTIR DA RAIZ DO GIT
           - $values/kong/poc/kong/kong-gitops/environments/hml/kong-dp-values.yaml
 
     - repoURL: https://github.com/reginaldo-opus/test-deploy.git
@@ -26,8 +38,11 @@ spec:
     namespace: kong
 
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 5m

@@ -1,0 +1,70 @@
+# ===========================================================================
+# .gitignore — Kong Deck
+#
+# Ignora arquivos gerados, temporários e sensíveis.
+# Apenas o kong.yaml.gz comprimido deve ir para o Git (via GitOps).
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Terraform
+# ---------------------------------------------------------------------------
+# Diretório de providers e módulos baixados
+.terraform/
+
+# State files — contêm apenas o local_file, mas não devem ir para o Git
+# Em produção, usar backend remoto (S3, GCS, etc.)
+terraform.tfstate
+terraform.tfstate.backup
+
+# Variáveis locais com valores sensíveis (secrets, tokens)
+# Cada ambiente deve ter seu próprio terraform.tfvars
+terraform.tfvars
+
+# Plan files
+*.tfplan
+.terraform.lock.hcl
+
+# ---------------------------------------------------------------------------
+# Output — Arquivos gerados pelo Terraform
+# ---------------------------------------------------------------------------
+# O kong.yaml pode ser enorme (26MB+ com 60 brands)
+# Não deve ir para o Git — apenas o .gz comprimido vai
+output/kong.yaml
+
+# O kong.yaml.gz do output/ é intermediário — o que vai para o Git
+# é a cópia em poc/kong/kong-gitops/environments/hml/deck/kong.yaml.gz
+output/kong.yaml.gz
+
+# Kustomization vazio/legado no output/
+output/kustomization.yaml*
+
+# ---------------------------------------------------------------------------
+# IDE / Editor
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+Thumbs.db
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# Kubernetes / Helm
+# ---------------------------------------------------------------------------
+# Certificados TLS (nunca devem ir para o Git!)
+poc/kong/kong-helm/certs/*.key
+poc/kong/kong-helm/certs/*.crt
+poc/kong/kong-helm/certs/*.pem
+
+# ---------------------------------------------------------------------------
+# Temporários
+# ---------------------------------------------------------------------------
+*.tmp
+*.bak
+*.log

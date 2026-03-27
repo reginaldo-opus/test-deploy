@@ -1,24 +1,57 @@
 # ============================================================================
-# deck_brand module
+# deck_brand module — Orquestrador de Serviços por Brand/Tenant
 #
-# Receives a single brand object and produces the full list of Kong services,
-# routes, and plugins for that brand.  Output is a list of HCL maps that get
-# merged into the top-level kong.yaml.
+# Este módulo recebe um único objeto brand e produz a lista completa de
+# Kong services, routes e plugins para esse brand.
+#
+# Para cada brand, instancia 16 sub-módulos deck_service — um para cada
+# grupo de APIs do Open Banking Brasil:
+#
+#   Serviço                  │ Host                          │ FQDN usado
+#   ─────────────────────────┼───────────────────────────────┼──────────────────
+#   status                   │ oob_status_api_host           │ public_fqdn
+#   status-maintenance       │ oob_status_api_host           │ public_fqdn (interno)
+#   consent-payment          │ oob_consent_api_host          │ public_fqdn_mtls
+#   consent-data-sharing-v2  │ oob_consent_api_host          │ public_fqdn_mtls
+#   consent-data-sharing-v3  │ oob_consent_api_host          │ public_fqdn_mtls
+#   consent-credit-portabil. │ oob_consent_api_host          │ public_fqdn_mtls
+#   consent-oob              │ oob_consent_api_host          │ public + internal
+#   consent-as (condicional) │ oob_consent_api_host          │ public_fqdn
+#   financial-data           │ oob_financial_data_api_host   │ public_fqdn_mtls
+#   payment                  │ oob_payment_api_host          │ public_fqdn_mtls
+#   payment-oob              │ oob_payment_api_host          │ public + internal
+#   payment-as (condicional) │ oob_payment_api_host          │ public_fqdn
+#   open-data                │ oob_open_data_api_host        │ public_fqdn
+#   auth-server-fapi         │ oob_authorization_server_host │ public + internal
+#   auth-server-fapi-mtls    │ oob_authorization_server_host │ public_fqdn_mtls
+#   auth-server-non-fapi     │ oob_authorization_server_host │ public + internal
+#
+# Os serviços consent-as e payment-as só são criados quando
+# expose_internal_apis = true (NUNCA em produção).
+#
+# Output: lista flat de services no formato declarativo do decK.
 # ============================================================================
 
 locals {
   brand_id         = var.brand.brand_id
   component_prefix = var.component_prefix
 
-  # Connector measurements header — used by services that need PCM events
+  # Headers customizados usados por serviços que reportam eventos PCM/portabilidade
   connector_measurements_header = "X-OOB-Connector-Measurements"
   consent_id_portability_header = "X-Consent-Id-Portability"
 }
 
 # ============================================================================
-# Sub-modules for each service domain
+# Sub-módulos — um para cada domínio de API
+#
+# Cada módulo recebe a mesma estrutura de variáveis, diferindo em:
+#   - service_name: nome do serviço no Kong
+#   - service_host/port: backend upstream
+#   - public_fqdns: domínios que ativam a rota
+#   - internal_api: se true, não adiciona oob-error-handler
+#   - connector/consent headers: se "none", não são removidos no response
+#   - routes: definições de rotas (padrão via routes_defaults.tf)
 # ============================================================================
-
 module "status" {
   source = "../deck_service"
 
@@ -333,6 +366,10 @@ module "consent_oob" {
   routes = length(var.routes_consent_oob) > 0 ? var.routes_consent_oob : local.default_routes_consent_oob
 }
 
+# ============================================================================
+# Serviço condicional: consent-as
+# Só criado quando expose_internal_apis = true (nunca em produção)
+# ============================================================================
 module "consent_as" {
   source = "../deck_service"
   count  = var.expose_internal_apis ? 1 : 0
@@ -516,6 +553,10 @@ module "payment_oob" {
   routes = length(var.routes_payment_oob) > 0 ? var.routes_payment_oob : local.default_routes_payment_oob
 }
 
+# ============================================================================
+# Serviço condicional: payment-as
+# Só criado quando expose_internal_apis = true (nunca em produção)
+# ============================================================================
 module "payment_as" {
   source = "../deck_service"
   count  = var.expose_internal_apis ? 1 : 0
@@ -754,8 +795,11 @@ module "auth_server_non_fapi" {
 
 # ============================================================================
 # Output: merge all services into a flat list
+#
+# Concatena os services de todos os 16 sub-módulos.
+# Os módulos condicionais (consent_as, payment_as) usam flatten com for
+# porque são instanciados com count (retornam lista de módulos).
 # ============================================================================
-
 output "services" {
   value = flatten(concat(
     module.status.services,
